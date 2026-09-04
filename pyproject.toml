@@ -3,7 +3,7 @@ name = "kaelum-commerce-checkout"
 version = "0.1.0"
 description = "KAELUM storefront backend for the anthropics/commerce-agents shopping agent."
 requires-python = ">=3.11"
-dependencies = ["httpx>=0.27"]
+dependencies = ["httpx>=0.27", "python-dotenv>=1.0"]
 
 [build-system]
 requires = ["setuptools>=68"]

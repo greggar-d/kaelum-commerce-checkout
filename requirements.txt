@@ -10,3 +10,4 @@ shopping-agent-runtime @ git+https://github.com/anthropics/commerce-agents.git@f
 
 # This backend's own dependency.
 httpx>=0.27
+python-dotenv>=1.0

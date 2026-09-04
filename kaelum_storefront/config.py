@@ -14,12 +14,17 @@ from __future__ import annotations
 
 import os
 
+from dotenv import load_dotenv
 from shopping_agent import ShoppingAgentConfig
 
 from .client import KaelumSettings
 
 
 def settings_from_env() -> KaelumSettings:
+    # Load a local .env if present. Searches the working directory and its parents,
+    # so it works whether the script is run from the repo root or a subfolder. Values
+    # already set in the environment win, so a shell export still overrides .env.
+    load_dotenv()
     return KaelumSettings(
         functions_base=os.environ.get("KAELUM_FUNCTIONS_BASE", "https://kaelum.app/functions"),
         merchant_token=os.environ.get("KAELUM_MERCHANT_TOKEN") or None,
