@@ -1,0 +1,13 @@
+KAELUM Commerce Checkout
+Copyright 2026 Kaelum Technologies Ltd (England and Wales No. 16681154)
+
+This product includes and builds upon the Claude Commerce Agents reference
+blueprint by Anthropic PBC (https://github.com/anthropics/commerce-agents),
+licensed under the Apache License, Version 2.0.
+
+The blueprint's packages (commerce-common, shopping-agent-core,
+shopping-agent-runtime) are installed unchanged from that repository at the
+commit pinned in requirements.txt. This repository adds a KAELUM storefront
+backend on top of them. It does not modify the blueprint.
+
+KAELUM, KLM and K.A.T.E. are marks of Kaelum Technologies Ltd.
