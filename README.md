@@ -8,14 +8,21 @@ It follows the same pattern as Shopify's [claude-for-commerce-examples](https://
 
 ## The seam
 
-Two live KAELUM endpoints do the work. Both already back the KAELUM WebMCP layer.
+Three live KAELUM endpoints do the work. The first two already back the KAELUM WebMCP layer.
 
 | Blueprint surface | KAELUM endpoint | What it does |
 | --- | --- | --- |
 | `search_products`, `get_product_details` | `kaelumDiscover` | Read-only network discovery. Returns live KAELUM merchants and in-stock products, each priced in KLM at the discount checkout applies. Moves no money, reads no account. |
 | `checkout_handoff` | `createUniversalPaymentSession` | Takes a merchant Bearer token and a gross GBP amount, returns a hosted gateway URL. The customer completes the KLM spend on kaelum.app, where a human confirms it. |
+| (identity) | `kaelumWhoAmI` | Takes the merchant Bearer token and returns that merchant's public `merchant_ref`. Called once and cached. |
 
 The blueprint calls `checkout_handoff` after the model's `checkout` tool call and pins the returned URL onto the checkout card. The model never sees or supplies the URL, which matches KAELUM's own posture: an agent may stage the order, but a human confirms the spend on kaelum.app.
+
+## One merchant identity
+
+Every KAELUM merchant has one public reference, `merchant_ref` (`kmr_...`). It appears on every merchant and product in discovery, it is what `kaelumWhoAmI` returns for a merchant token, and `createUniversalPaymentSession` refuses (409 `MERCHANT_MISMATCH`) any session whose `merchant_ref` is not the merchant the token pays.
+
+This backend resolves its `merchant_ref` from the token, scopes discovery to it, and sends it with every checkout. So an agent selling for one store only ever sees that store's products, and a cart can never settle to another merchant's account. A cart mixing merchants is refused before any session is created.
 
 ## Money maths, so it reconciles
 
@@ -39,7 +46,8 @@ cp .env.example .env                  # fill in the values below
 Set these in `.env`:
 
 - `KAELUM_MERCHANT_TOKEN`: a KAELUM MerchantToken issued for the store this deployment sells for. Required for the checkout hand-off. Discovery works without it.
-- `KAELUM_SITE_KEY`: optional discovery scope hint (the store's Wix site_key or Integration site_token).
+- `KAELUM_MERCHANT_REF`: optional. The merchant's public reference. Leave blank and it is resolved from the token.
+- `KAELUM_SITE_KEY`: optional discovery scope for deployments without a token (the store's Wix site_key or Integration site_token). Ignored once a `merchant_ref` is known.
 - `KAELUM_FUNCTIONS_BASE`: defaults to `https://kaelum.app/functions`.
 - `ANTHROPIC_API_KEY`: only needed to run a live model turn, not for discovery.
 
@@ -71,7 +79,7 @@ This is the blueprint's sanctioned minimal shape: implement search and product d
 
 These are deliberate scaffold simplifications, not blockers for a demo. They are the honest list of what a production integration would tidy.
 
-1. **Two merchant identity systems.** The session creator authenticates with a `MerchantToken`; discovery resolves a store by `site_key` or `site_token`. This backend uses a `MerchantToken` for settlement and an optional `site_key` for discovery. Unifying them, so discovery and payment resolve the same record from one identifier, is a small platform task.
+1. ~~**Two merchant identity systems.**~~ Closed in October 2026. Discovery, `kaelumWhoAmI` and payment sessions now share one `merchant_ref`; see "One merchant identity" above.
 2. **Single-merchant scope.** One deployment sells for one store (one `MerchantToken`). A multi-seller cart would create one session per seller and return one `CheckoutHandoff` per seller, which the blueprint already supports through the `seller` field.
 3. **No product id or single-product lookup in discovery.** This backend derives a stable id from each product's canonical URL and caches the record. A production catalogue would expose a real id and a single-product read.
 4. **GBP only.** KAELUM settles in GBP. A cart in any other currency is refused at hand-off rather than converted silently.

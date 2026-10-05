@@ -29,6 +29,7 @@ def settings_from_env() -> KaelumSettings:
         functions_base=os.environ.get("KAELUM_FUNCTIONS_BASE", "https://kaelum.app/functions"),
         merchant_token=os.environ.get("KAELUM_MERCHANT_TOKEN") or None,
         site_key=os.environ.get("KAELUM_SITE_KEY") or None,
+        merchant_ref=os.environ.get("KAELUM_MERCHANT_REF") or None,
         success_url=os.environ.get("KAELUM_SUCCESS_URL", "https://kaelum.app/checkout/success"),
         cancel_url=os.environ.get("KAELUM_CANCEL_URL", "https://kaelum.app/checkout/cancel"),
     )

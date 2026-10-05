@@ -30,6 +30,7 @@ DISCOVER_BODY: dict[str, Any] = {
             "kaelum_pay_target": "https://8tclothing.com/p/signature-tee",
             "availability": "IN_STOCK",
             "seller_verified": True,
+            "merchant_ref": "kmr_8t",
         }
     ],
 }
@@ -95,6 +96,8 @@ def test_add_to_cart_holds_gross_and_checkout_passes_discount(session):
     assert call["amount_gbp"] == 60.0
     assert call["discount_pct"] == 0.08
     assert call["metadata"]["initiator"] == "agent"
+    # The cart's merchant is named, so KAELUM can refuse a token for another merchant.
+    assert call["merchant_ref"] == "kmr_8t"
 
 
 def test_non_gbp_cart_is_refused(session):
@@ -110,3 +113,95 @@ def test_unknown_product_add_refused(session):
     backend = KaelumStorefrontBackend(FakeClient())
     with pytest.raises(Unavailable):
         _run(backend.add_to_cart(session, "klm-deadbeef", 1))
+
+
+def test_mixed_merchant_cart_is_refused(session):
+    from shopping_agent import Cart, CartItem
+
+    backend = KaelumStorefrontBackend(FakeClient())
+    backend._catalog["klm-a"] = {"merchant_ref": "kmr_8t"}
+    backend._catalog["klm-b"] = {"merchant_ref": "kmr_other"}
+    cart = Cart(
+        items=[
+            CartItem(product_id="klm-a", title="A", price=10.0, quantity=1),
+            CartItem(product_id="klm-b", title="B", price=10.0, quantity=1),
+        ],
+        currency="GBP",
+    )
+    with pytest.raises(Unavailable):
+        _run(backend.checkout_handoff(session, cart))
+
+
+# -- Real client against a mock transport: identity flows end to end ---------------
+
+import httpx  # noqa: E402
+
+from kaelum_storefront.client import KaelumClient, KaelumClientError, KaelumSettings  # noqa: E402
+
+
+def _client(handler, **settings):
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    return KaelumClient(KaelumSettings(functions_base="https://k/functions", **settings), http=http)
+
+
+def test_client_resolves_ref_once_and_scopes_discovery():
+    seen: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req)
+        if req.url.path.endswith("/kaelumWhoAmI"):
+            assert req.headers["authorization"] == "Bearer tok"
+            return httpx.Response(200, json={"ok": True, "merchant_ref": "kmr_8t", "stores": []})
+        if req.url.path.endswith("/kaelumDiscover"):
+            return httpx.Response(200, json={"ok": True, "products": [], "merchants": []})
+        if req.url.path.endswith("/createUniversalPaymentSession"):
+            import json
+            assert json.loads(req.content)["merchant_ref"] == "kmr_8t"
+            return httpx.Response(200, json={"ok": True, "gateway_url": "https://kaelum.app/gateway-checkout?session=s"})
+        return httpx.Response(404, json={"ok": False})
+
+    async def go():
+        c = _client(handler, merchant_token="tok", site_key="wix_ignored")
+        await c.discover("tee")
+        await c.discover("hat")
+        await c.create_payment_session(order_id="o", amount_gbp=10.0)
+        await c.aclose()
+
+    _run(go())
+    whoami_calls = [r for r in seen if r.url.path.endswith("/kaelumWhoAmI")]
+    assert len(whoami_calls) == 1  # resolved once, then cached
+    discover = [r for r in seen if r.url.path.endswith("/kaelumDiscover")]
+    assert all(r.url.params["merchant_ref"] == "kmr_8t" for r in discover)
+    assert all("siteKey" not in r.url.params for r in discover)  # ref wins over site key
+
+
+def test_client_without_token_uses_site_key_and_never_calls_whoami():
+    seen: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req)
+        return httpx.Response(200, json={"ok": True, "products": [], "merchants": []})
+
+    async def go():
+        c = _client(handler, site_key="wix_8t")
+        await c.discover("tee")
+        await c.aclose()
+
+    _run(go())
+    assert [r.url.path.rsplit("/", 1)[-1] for r in seen] == ["kaelumDiscover"]
+    assert seen[0].url.params["siteKey"] == "wix_8t"
+
+
+def test_merchant_mismatch_surfaces_as_client_error():
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(409, json={"ok": False, "error": "MERCHANT_MISMATCH", "message": "different merchant"})
+
+    async def go():
+        c = _client(handler, merchant_token="tok", merchant_ref="kmr_other")
+        try:
+            await c.create_payment_session(order_id="o", amount_gbp=10.0)
+        finally:
+            await c.aclose()
+
+    with pytest.raises(KaelumClientError):
+        _run(go())

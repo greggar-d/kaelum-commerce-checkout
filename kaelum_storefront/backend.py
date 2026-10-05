@@ -179,12 +179,25 @@ class KaelumStorefrontBackend(StorefrontBackend):
             raise Unavailable(
                 f"KAELUM settles in {CURRENCY}; this cart is in {cart.currency}."
             )
+        # One merchant per session. Every item carries the merchant_ref discovery gave it;
+        # a mixed cart is refused here rather than settled to one merchant's account.
+        refs = {
+            (self._catalog.get(i.product_id) or {}).get("merchant_ref") for i in cart.items
+        }
+        refs.discard(None)
+        if len(refs) > 1:
+            raise Unavailable(
+                "This cart holds items from more than one KAELUM merchant. "
+                "Check out each merchant's items separately."
+            )
+        merchant_ref = next(iter(refs), None)
         order_id = f"cca-{session.session_id[:12]}-{cart.item_count}"
         summary = ", ".join(f"{i.quantity} x {i.title}" for i in cart.items)[:280]
         body = await self._client.create_payment_session(
             order_id=order_id,
             amount_gbp=cart.subtotal,
             discount_pct=self._merchant_discount_fraction,
+            merchant_ref=merchant_ref,
             metadata={
                 "platform": "claude-commerce-agents",
                 "initiator": "agent",

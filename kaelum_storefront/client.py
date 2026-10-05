@@ -38,12 +38,15 @@ class KaelumSettings:
     default. merchant_token is a KAELUM MerchantToken issued for the one store this
     deployment sells for; it authorises createUniversalPaymentSession. site_key is the
     merchant's discovery key (the Wix site_key or the Integration site_token) used to
-    scope discovery to that store where wanted.
+    scope discovery to that store where wanted. merchant_ref is the merchant's public
+    KAELUM reference (kmr_...). Leave it unset and it is resolved once from the token
+    via kaelumWhoAmI; it is the one identifier used for discovery and settlement.
     """
 
     functions_base: str = "https://kaelum.app/functions"
     merchant_token: str | None = None
     site_key: str | None = None
+    merchant_ref: str | None = None
     success_url: str = "https://kaelum.app/checkout/success"
     cancel_url: str = "https://kaelum.app/checkout/cancel"
     request_timeout_s: float = 20.0
@@ -58,6 +61,29 @@ class KaelumClient:
         self._s = settings
         self._http = http or httpx.AsyncClient(timeout=settings.request_timeout_s)
         self._owns_http = http is None
+        self._merchant_ref: str | None = settings.merchant_ref
+
+    # -- Merchant identity -----------------------------------------------------------
+
+    async def whoami(self) -> dict[str, Any]:
+        """Call kaelumWhoAmI with the merchant token. Returns merchant_ref and stores."""
+        if not self._s.merchant_token:
+            raise KaelumClientError("No KAELUM merchant token configured. Set KAELUM_MERCHANT_TOKEN.")
+        resp = await self._http.get(
+            f"{self._s.functions_base}/kaelumWhoAmI",
+            headers={"Authorization": f"Bearer {self._s.merchant_token}"},
+        )
+        body = _json(resp)
+        if not body.get("ok", False) or not body.get("merchant_ref"):
+            raise KaelumClientError(f"kaelumWhoAmI failed: {body.get('message') or resp.status_code}")
+        return body
+
+    async def merchant_ref(self) -> str | None:
+        """The merchant this deployment sells for. Configured, or resolved once from the
+        token. None when there is no token (network-wide discovery only)."""
+        if self._merchant_ref is None and self._s.merchant_token:
+            self._merchant_ref = (await self.whoami())["merchant_ref"]
+        return self._merchant_ref
 
     async def aclose(self) -> None:
         if self._owns_http:
@@ -79,9 +105,13 @@ class KaelumClient:
         params: dict[str, Any] = {"q": query or "", "limit": limit, "offset": offset}
         if category:
             params["category"] = category
-        if self._s.site_key:
-            # Scope hint for stores that pass a site key; harmless where discovery is
-            # network-wide.
+        # Scope discovery to the one merchant this deployment sells for, so the agent can
+        # never show (and then try to pay for) another merchant's product. merchant_ref
+        # is authoritative; siteKey is the fallback for deployments without a token.
+        ref = await self.merchant_ref()
+        if ref:
+            params["merchant_ref"] = ref
+        elif self._s.site_key:
             params["siteKey"] = self._s.site_key
         resp = await self._http.get(f"{self._s.functions_base}/kaelumDiscover", params=params)
         body = _json(resp)
@@ -98,6 +128,7 @@ class KaelumClient:
         amount_gbp: float,
         discount_pct: float | None = None,
         customer_email: str | None = None,
+        merchant_ref: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create a KAELUM payment session and return its JSON body.
@@ -125,6 +156,11 @@ class KaelumClient:
             payload["discount_pct"] = discount_pct
         if customer_email:
             payload["customer_email"] = customer_email
+        # KAELUM refuses (409 MERCHANT_MISMATCH) a session whose merchant_ref is not the
+        # merchant this token pays, so a cart can never settle to the wrong merchant.
+        ref = merchant_ref or await self.merchant_ref()
+        if ref:
+            payload["merchant_ref"] = ref
 
         resp = await self._http.post(
             f"{self._s.functions_base}/createUniversalPaymentSession",
