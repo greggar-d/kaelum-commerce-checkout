@@ -26,7 +26,7 @@ This backend resolves its `merchant_ref` from the token, scopes discovery to it,
 
 ## Money maths, so it reconciles
 
-The catalogue shows the gross GBP price. KAELUM applies the merchant discount itself, floored at 6 percent, when the session is created, so this backend passes the gross amount to the session and never a pre-discounted figure. Passing a net figure would discount twice. The KLM units, net price and discount for each product travel in the product's attributes, so the agent can tell the shopper what they pay in KLM and what they save while the authoritative charge stays with the KAELUM session. The backend also passes the merchant's discount to the session explicitly, so the discount quoted in discovery equals the discount charged at checkout.
+The catalogue shows the gross GBP price. KAELUM applies the merchant discount itself, floored at 6 percent, when the session is created, so this backend passes the gross amount to the session and never a pre-discounted figure. Passing a net figure would discount twice. The KLM units, net price and discount for each product travel in the product's attributes, so the agent can tell the shopper what they pay in KLM and what they save while the authoritative charge stays with the KAELUM session. The backend also passes the merchant's discount to the session explicitly, so the discount quoted in discovery equals the discount charged at checkout.Discovery's klm_units is the all-in amount the shopper pays: the discounted price plus the 4.5% KAELUM platform fee, which the buyer pays on top. The merchant receives the full discounted amount.
 
 ## Install
 

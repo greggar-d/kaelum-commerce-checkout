@@ -253,7 +253,7 @@ class KaelumStorefrontBackend(StorefrontBackend):
             self._merchant_discount_fraction = round(float(disc_pct) / 100.0, 4)
 
         attributes: dict[str, str] = {"pay_in": "KLM"}
-        for key in ("rrp_gbp", "net_gbp", "klm_units", "discount_pct"):
+        for key in ("rrp_gbp", "net_gbp", "fee_gbp", "total_gbp", "klm_units", "discount_pct"):
             val = record.get(key)
             if val is not None:
                 attributes[key] = str(val)
