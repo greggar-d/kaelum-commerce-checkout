@@ -296,3 +296,14 @@ def test_disclosure_uses_live_figures(session):
     assert rows["KLM price"] == "£0.20 per KLM"  # from discovery, not hardcoded
     assert "4.5%" in rows["KAELUM platform fee"]
     assert _run(backend.get_disclosure(session, "klm-unknown0")) is None
+
+
+def test_token_cleaning_and_mixups():
+    from kaelum_storefront.config import _clean_token
+
+    assert _clean_token(None) is None
+    assert _clean_token("  ") is None
+    assert _clean_token(' "mk_live_abc" ') == "mk_live_abc"
+    for wrong in ("kmr_123", "wix_abc", "shop_abc", "6a9a7b2e00deaaa06316222a"):
+        with pytest.raises(ValueError):
+            _clean_token(wrong)

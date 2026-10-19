@@ -21,6 +21,28 @@ from shopping_agent import ShoppingAgentConfig
 from .client import KaelumSettings
 
 
+def _clean_token(raw: str | None) -> str | None:
+    """Strip stray spaces and quotes, and catch the usual paste mix-ups early with a plain
+    message instead of a 401 from KAELUM."""
+    token = (raw or "").strip().strip("'\"").strip()
+    if not token:
+        return None
+    if not token.startswith("mk_"):
+        hint = {
+            "kmr_": "that is the merchant reference (KAELUM_MERCHANT_REF), not the token",
+            "wix_": "that is the Wix site key (KAELUM_SITE_KEY), not the token",
+            "shop_": "that is a Shopify site token (KAELUM_SITE_KEY), not the token",
+        }
+        why = next((v for k, v in hint.items() if token.startswith(k)), None)
+        raise ValueError(
+            "KAELUM_MERCHANT_TOKEN does not look like a merchant token "
+            "(they start with mk_live_). "
+            + (f"It starts {token[:5]!r}: {why}. " if why else "")
+            + "Copy the token from Generate Merchant Token in the KAELUM merchant dashboard."
+        )
+    return token
+
+
 def settings_from_env() -> KaelumSettings:
     # Load a local .env if present. Searches the working directory and its parents,
     # so it works whether the script is run from the repo root or a subfolder. Values
@@ -28,7 +50,7 @@ def settings_from_env() -> KaelumSettings:
     load_dotenv()
     return KaelumSettings(
         functions_base=os.environ.get("KAELUM_FUNCTIONS_BASE", "https://kaelum.app/functions"),
-        merchant_token=os.environ.get("KAELUM_MERCHANT_TOKEN") or None,
+        merchant_token=_clean_token(os.environ.get("KAELUM_MERCHANT_TOKEN")),
         site_key=os.environ.get("KAELUM_SITE_KEY") or None,
         merchant_ref=os.environ.get("KAELUM_MERCHANT_REF") or None,
         success_url=os.environ.get("KAELUM_SUCCESS_URL", "https://kaelum.app/checkout/success"),
