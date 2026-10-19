@@ -88,8 +88,13 @@ async def main(args: argparse.Namespace) -> int:
                 "tools": out.tool_names, "reply": out.reply, "cart": out.cart_ids,
                 "elapsed_s": out.elapsed_s, "usage": out.usage, "error": out.error,
             })
-            mark = "PASS" if passed else ("JUDGE?" if judge_failure else "FAIL")
+            mark = "PASS" if passed else ("ERROR" if out.error else ("JUDGE?" if judge_failure else "FAIL"))
             print(f"{mark:6} {case['id']} [trial {trial + 1}/{args.trials}] {out.elapsed_s}s")
+            if out.error:
+                print(f"       run error: {out.error[:300]}")
+            for c in checks:
+                if c["check"] == "rubric" and c["passed"] is None:
+                    print(f"       {c['detail'][:300]}")
             await data_client.aclose()
     meta = {
         "started": started, "agent_model": args.model,

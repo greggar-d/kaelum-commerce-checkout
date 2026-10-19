@@ -110,7 +110,7 @@ def test_judge_records_verdict_and_fingerprint():
         class messages:
             @staticmethod
             async def create(**kwargs):
-                assert kwargs["temperature"] == 0
+                assert kwargs["tool_choice"]["name"] == "record_verdict"
                 block = FakeBlock(type="tool_use", id="v", name="record_verdict",
                                   input={"verdict": "PASS", "reason": "Quoted 149.95 KLM."})
                 return SimpleNamespace(content=[block])

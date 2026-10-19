@@ -8,8 +8,8 @@ the rules but no runner; this is the runner.
 
 Each case drives one turn of the blueprint's ShoppingAgent over KaelumStorefrontBackend.
 Code graders read the events the turn yields and the cart it leaves; a ``rubric`` goes
-to a judge model pinned at temperature 0, whose verdicts carry a fingerprint of the
-judge model and the rubric.
+to a judge model, pinned by name and forced to answer through a structured verdict
+tool; each verdict carries a fingerprint of the judge model and the rubric.
 
 Data. By default the backend reads ``evals/catalogue.json`` (8T Clothing's live listings
 recorded on 19 October 2026, plus two eval-only listings from an invented seller, one
@@ -273,7 +273,6 @@ async def judge(client: Any, judge_model: str, rubric: str, case: dict[str, Any]
         resp = await client.messages.create(
             model=judge_model,
             max_tokens=400,
-            temperature=0,
             system=JUDGE_SYSTEM,
             tools=[VERDICT_TOOL],
             tool_choice={"type": "tool", "name": "record_verdict"},

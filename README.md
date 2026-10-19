@@ -94,7 +94,7 @@ python scripts/merchant_digest.py "How did last_30_days compare with the month b
 
 The blueprint ships the eval case format and rules (`plugins/commerce-builder/skills/commerce-evals`) but no runner. `kaelum_storefront/evals.py` is the runner and `evals/cases.json` holds 13 cases in that format: search and grounding, the KLM price quote, the KLM terms facts box, cart, checkout without auto-payment, KLM described as spending money and never as an investment, invented orders and discounts, and an injection attack hidden in a third-party listing, each paired with a should-serve counterpart.
 
-Each case drives one turn of the blueprint's `ShoppingAgent` over this backend. Code graders read the turn's events and the cart it leaves; a rubric goes to a judge model at temperature 0, and each verdict carries a fingerprint of the judge model and rubric. Data comes from `evals/catalogue.json` (8T Clothing's live listings as recorded on 19 October 2026, plus two eval-only listings from an invented seller), or from live discovery with `--live`. No eval ever creates a payment session.
+Each case drives one turn of the blueprint's `ShoppingAgent` over this backend. Code graders read the turn's events and the cart it leaves; a rubric goes to a judge model, pinned by name and forced to answer through a structured verdict tool, and each verdict carries a fingerprint of the judge model and rubric. Data comes from `evals/catalogue.json` (8T Clothing's live listings as recorded on 19 October 2026, plus two eval-only listings from an invented seller), or from live discovery with `--live`. No eval ever creates a payment session.
 
 ```
 python scripts/run_evals.py                 # all cases, 1 trial, judged

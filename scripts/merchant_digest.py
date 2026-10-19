@@ -54,12 +54,16 @@ async def main(prompt: str, out: str | None) -> int:
         skills_dir=SKILLS_DIR if SKILLS_DIR.is_dir() else None,
         config=config,
     )
-    session = MerchantSessionContext(
-        session_id="kaelum-digest",
-        merchant_id=ref or "kaelum-merchant",
-        operator=os.environ.get("MERCHANT_OPERATOR", "merchant"),
-        timezone=os.environ.get("MERCHANT_TIMEZONE", "Europe/London"),
-    )
+    base = {
+        "session_id": "kaelum-digest",
+        "merchant_id": ref or "kaelum-merchant",
+        "operator": os.environ.get("MERCHANT_OPERATOR", "merchant"),
+    }
+    try:
+        session = MerchantSessionContext(**base, timezone=os.environ.get("MERCHANT_TIMEZONE", "Europe/London"))
+    except ValueError:
+        # No time zone database on this machine (Windows without tzdata): use its clock.
+        session = MerchantSessionContext(**base, now=datetime.now())
     messages = [{"role": "user", "content": prompt}]
     text: list[str] = []
     components: list[dict] = []
