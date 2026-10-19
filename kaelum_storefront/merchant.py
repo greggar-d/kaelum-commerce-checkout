@@ -32,6 +32,7 @@ backend uses, so one product has one id on both sides.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -73,6 +74,7 @@ CURRENCY = "GBP"
 # forced tool_choice. Override with KAELUM_AGENT_MODEL.
 DEFAULT_MODEL = "claude-sonnet-5"
 DEFAULT_PERIOD = "last_7_days"
+PAGE_PAUSE_S = 1.0
 
 # Metric name -> (field in the insights payload, unit). Names follow the snapshot.
 METRICS: dict[str, tuple[str, str]] = {
@@ -228,6 +230,9 @@ class KaelumMerchantBackend(MerchantBackend):
                 total = body.get("product_count")
                 if len(page) < 24 or (isinstance(total, int) and offset >= total):
                     break
+                # Each discovery call does many reads on the platform; space the pages
+                # out so a briefing never bursts past KAELUM's rate limit.
+                await asyncio.sleep(PAGE_PAUSE_S)
         return list(self._catalog.values())
 
     def _to_listing(self, rec: dict[str, Any]) -> Listing:
@@ -420,13 +425,20 @@ class KaelumMerchantBackend(MerchantBackend):
     # -- Context ----------------------------------------------------------------------------
 
     async def get_merchant_context(self, session: MerchantSessionContext) -> dict[str, Any] | None:
-        listings = await self._listings()
-        rates = {r.get("discount_pct") for r in listings if r.get("discount_pct") is not None}
+        # Read on every turn, so one small discovery call: the count and the discount
+        # rate need no full catalogue.
+        if self._catalog:
+            records, count = list(self._catalog.values()), len(self._catalog)
+        else:
+            body = await self._client.discover(query="", limit=24)
+            records = body.get("products", []) or []
+            count = body.get("product_count", len(records))
+        rates = {r.get("discount_pct") for r in records if r.get("discount_pct") is not None}
         return {
             "platform": "KAELUM",
             "currency": CURRENCY,
             "default_period": DEFAULT_PERIOD,
-            "listings": len(listings),
+            "listings": count,
             "klm_discount_pct": next(iter(rates)) if len(rates) == 1 else sorted(rates),
             "limitations": [
                 {"source": "sales", "note": "KLM checkout sessions only; paylinks, QR and transfers are not counted."},

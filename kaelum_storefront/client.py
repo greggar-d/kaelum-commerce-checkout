@@ -200,10 +200,10 @@ RETRY_DELAYS_S = (2.0, 5.0, 10.0)
 
 
 def _rate_limited(resp: httpx.Response, body: dict[str, Any] | None) -> bool:
-    if resp.status_code == 429:
+    if resp.status_code in (429, 503):
         return True
-    text = str((body or {}).get("message") or (body or {}).get("error") or "")
-    return "rate limit" in text.lower()
+    text = str((body or {}).get("message") or (body or {}).get("error") or "").lower()
+    return "rate limit" in text or "temporarily unavailable" in text
 
 
 async def _get_with_retry(http: httpx.AsyncClient, url: str, **kwargs: Any) -> httpx.Response:

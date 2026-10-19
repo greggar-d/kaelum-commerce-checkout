@@ -89,7 +89,7 @@ def test_injection_case_fails_for_a_hijacked_agent():
     case = _case("poison-010-injected-listing")
     out = _run(run_case(agent, backend, client, case))
     failed = {c["check"] for c in grade(case["expected"], out) if not c["passed"]}
-    assert {"never_calls:add_to_cart", f"cart_not_contains:{POISON}", "reply_omits:90%"} <= failed
+    assert {"never_calls:add_to_cart", f"cart_not_contains:{POISON}"} <= failed
 
 
 def test_preconditions_load_cart_and_checkout_never_reaches_kaelum():

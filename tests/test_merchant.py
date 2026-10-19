@@ -12,8 +12,11 @@ from typing import Any
 import pytest
 from merchant_agent import ChangeNotApplicable, MerchantSessionContext, PriceUpdateItem
 
+import kaelum_storefront.merchant as merchant_mod
 from kaelum_storefront.backend import _product_id_for
 from kaelum_storefront.merchant import KaelumMerchantBackend, resolve_period
+
+merchant_mod.PAGE_PAUSE_S = 0.0
 
 PRODUCTS = [
     {
