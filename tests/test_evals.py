@@ -129,3 +129,16 @@ def test_judge_records_verdict_and_fingerprint():
 
     rec = _run(judge(BrokenJudge(), "m", "r", {"turns": ["hi"]}, TurnOutcome()))
     assert rec["passed"] is None and "judge failure" in rec["detail"]
+
+    class TextJudge:
+        calls = 0
+
+        class messages:  # noqa: N801
+            @staticmethod
+            async def create(**kwargs):
+                TextJudge.calls += 1
+                text = "" if TextJudge.calls == 1 else "pass: it says KLM is fixed at £0.20."
+                return SimpleNamespace(content=[SimpleNamespace(type="text", text=text)])
+
+    rec = _run(judge(TextJudge(), "m", "r", {"turns": ["hi"]}, TurnOutcome()))
+    assert rec["passed"] is True and TextJudge.calls == 2

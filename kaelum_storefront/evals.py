@@ -269,33 +269,46 @@ def transcript(case: dict[str, Any], out: TurnOutcome, limit: int = 12_000) -> s
 
 
 async def judge(client: Any, judge_model: str, rubric: str, case: dict[str, Any], out: TurnOutcome) -> dict[str, Any]:
-    record = {"check": "rubric", "fingerprint": fingerprint(judge_model, rubric)}
-    try:
-        resp = await client.messages.create(
-            model=judge_model,
-            max_tokens=400,
-            system=JUDGE_SYSTEM,
-            tools=[VERDICT_TOOL],
-            # Not forced: some models reject a forced tool_choice. The system prompt asks
-            # for the tool, and a plain-text PASS/FAIL is accepted as a fallback.
-            messages=[{
-                "role": "user",
-                "content": f"<rubric>\n{rubric}\n</rubric>\n<transcript>\n{transcript(case, out)}\n</transcript>",
-            }],
-        )
-        block = next((b for b in resp.content if getattr(b, "type", "") == "tool_use"), None)
-        if block is not None:
-            verdict, reason = block.input.get("verdict"), block.input.get("reason", "")
-        else:
-            text = " ".join(getattr(b, "text", "") for b in resp.content).strip()
-            m = re.search(r"\b(PASS|FAIL)\b", text)
-            verdict, reason = (m.group(1) if m else None), text[:300]
-        if verdict not in ("PASS", "FAIL"):
-            raise ValueError(f"unparseable verdict {verdict!r}")
-        record.update(passed=verdict == "PASS", detail=reason)
-    except Exception as exc:  # noqa: BLE001 - a judge failure is kept apart from an agent failure
-        record.update(passed=None, detail=f"judge failure: {type(exc).__name__}: {exc}")
+    """One verdict for one rubric. The judge is asked to call the verdict tool; a plain
+    PASS or FAIL in its text is accepted too. A reply with no verdict is retried once,
+    and a judge failure is recorded apart from an agent failure."""
+    record: dict[str, Any] = {"check": "rubric", "fingerprint": fingerprint(judge_model, rubric)}
+    last = ""
+    for _attempt in range(2):
+        try:
+            resp = await client.messages.create(
+                model=judge_model,
+                max_tokens=600,
+                system=JUDGE_SYSTEM,
+                tools=[VERDICT_TOOL],
+                # Not forced: some models reject a forced tool_choice.
+                messages=[{
+                    "role": "user",
+                    "content": f"<rubric>\n{rubric}\n</rubric>\n<transcript>\n{transcript(case, out)}\n</transcript>",
+                }],
+            )
+        except Exception as exc:  # noqa: BLE001 - recorded as a judge failure
+            record.update(passed=None, detail=f"judge failure: {type(exc).__name__}: {exc}")
+            return record
+        verdict, reason = _read_verdict(resp)
+        if verdict in ("PASS", "FAIL"):
+            record.update(passed=verdict == "PASS", detail=reason)
+            return record
+        last = reason
+    record.update(passed=None, detail=f"judge failure: no verdict in reply: {last[:200]!r}")
     return record
+
+
+def _read_verdict(resp: Any) -> tuple[str | None, str]:
+    content = getattr(resp, "content", None) or []
+    for b in content:
+        if getattr(b, "type", "") == "tool_use":
+            inp = getattr(b, "input", {}) or {}
+            verdict = str(inp.get("verdict") or "").strip().upper() or None
+            return verdict, str(inp.get("reason", ""))
+    text = " ".join(getattr(b, "text", "") or "" for b in content).strip()
+    m = re.search(r"\b(PASS|FAIL)\b", text, re.IGNORECASE)
+    return (m.group(1).upper() if m else None), text[:300]
 
 
 # -- Report ------------------------------------------------------------------------------
