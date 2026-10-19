@@ -42,8 +42,8 @@ from kaelum_storefront.evals import (
     summarise,
 )
 
-DEFAULT_MODEL = os.environ.get("KAELUM_AGENT_MODEL", "claude-sonnet-5-5")
-DEFAULT_JUDGE = os.environ.get("KAELUM_JUDGE_MODEL", "claude-sonnet-5-5")
+DEFAULT_MODEL = os.environ.get("KAELUM_AGENT_MODEL", "claude-sonnet-5")
+DEFAULT_JUDGE = os.environ.get("KAELUM_JUDGE_MODEL", "claude-sonnet-5")
 SKILLS_DIR = Path(
     os.environ.get(
         "COMMERCE_AGENTS_SKILLS_DIR",

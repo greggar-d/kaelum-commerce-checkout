@@ -68,8 +68,10 @@ from .client import KaelumClient
 
 CURRENCY = "GBP"
 
-# Claude Sonnet 5.5: the standard tier for KAELUM agents. Override with KAELUM_AGENT_MODEL.
-DEFAULT_MODEL = "claude-sonnet-5-5"
+# Claude Sonnet 5: the standard tier for KAELUM agents and the blueprint's own default.
+# The blueprint forces a tool on grounding turns, which needs a model that accepts a
+# forced tool_choice. Override with KAELUM_AGENT_MODEL.
+DEFAULT_MODEL = "claude-sonnet-5"
 DEFAULT_PERIOD = "last_7_days"
 
 # Metric name -> (field in the insights payload, unit). Names follow the snapshot.

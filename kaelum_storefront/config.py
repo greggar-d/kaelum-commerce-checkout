@@ -20,8 +20,10 @@ from shopping_agent import ShoppingAgentConfig
 
 from .client import KaelumSettings
 
-# Claude Sonnet 5.5: the standard tier for KAELUM agents. Override with KAELUM_AGENT_MODEL.
-DEFAULT_MODEL = "claude-sonnet-5-5"
+# Claude Sonnet 5: the standard tier for KAELUM agents and the blueprint's own default.
+# The blueprint forces a tool on grounding turns, which needs a model that accepts a
+# forced tool_choice. Override with KAELUM_AGENT_MODEL.
+DEFAULT_MODEL = "claude-sonnet-5"
 
 
 def _clean_token(raw: str | None) -> str | None:
