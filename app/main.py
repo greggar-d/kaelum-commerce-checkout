@@ -47,15 +47,18 @@ def build_agent() -> ShoppingAgent:
 
 
 async def _one_turn(prompt: str) -> None:
-    from commerce_common.types import new_session  # provided by the blueprint
+    from shopping_agent import ShoppingSessionContext, ShoppingSessionState
 
     agent = build_agent()
     messages: list[dict] = [{"role": "user", "content": prompt}]
-    session, state = new_session(user_id="guest", session_id="demo-session")
-    async for event in agent.stream_turn(messages, session, state):
-        kind = getattr(event, "kind", getattr(event, "type", ""))
-        if kind == "text_delta":
-            print(getattr(event, "text", ""), end="", flush=True)
+    session = ShoppingSessionContext(session_id="demo-session", user_id="guest")
+    async for event in agent.stream_turn(messages, session, ShoppingSessionState()):
+        if event.type == "text_delta":
+            print(event.data.get("text", ""), end="", flush=True)
+        elif event.type == "tool_call":
+            print(f"\n[tool] {event.data.get('tool')}", flush=True)
+        elif event.type == "ui":
+            print(f"\n[ui] {event.data.get('component')}", flush=True)
     print()
 
 

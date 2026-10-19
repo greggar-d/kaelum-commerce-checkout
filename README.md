@@ -66,11 +66,43 @@ Run a live agent turn (needs `ANTHROPIC_API_KEY` and the blueprint skills):
 python app/main.py "show me KAELUM merchants with tees under 40 pounds"
 ```
 
-Run the tests (no network, no key; a fake client stands in for KAELUM):
+Run the tests (no network, no key; fake clients stand in for KAELUM and for the model):
 
 ```
 pytest -q
 ```
+
+## Merchant agent
+
+`kaelum_storefront/merchant.py` implements the blueprint's other integration surface, `MerchantBackend`, over KAELUM for the merchant the token pays. The blueprint's `MerchantAgent` then gives that merchant a briefing and analysis assistant.
+
+| Merchant surface | KAELUM source | Notes |
+| --- | --- | --- |
+| `get_business_snapshot`, `query_metrics` | `kaelumMerchantInsights` | KLM checkout sales, orders, checkouts started, conversion (paid / started), average order value, discount given; this period against the one before. Read-only, no customer data. |
+| `search_listings`, `get_listing`, `get_pricing_context` | `kaelumDiscover` | The merchant's own listings, with the same `klm-XXXXXXXX` ids the shopping side uses. |
+| stock, campaigns | not held by KAELUM | Switched off in `build_kaelum_merchant_config`; stated in the merchant context's limitations. |
+| `stage_listing_update`, `stage_price_update` | proposals only | Staged with the blueprint's guardrails. `apply_change` never writes: the merchant makes the approved change in their own store. |
+
+Run a briefing (needs `KAELUM_MERCHANT_TOKEN` and `ANTHROPIC_API_KEY`):
+
+```
+python scripts/merchant_digest.py
+python scripts/merchant_digest.py "How did last_30_days compare with the month before?" --out digest.json
+```
+
+## Evals
+
+The blueprint ships the eval case format and rules (`plugins/commerce-builder/skills/commerce-evals`) but no runner. `kaelum_storefront/evals.py` is the runner and `evals/cases.json` holds 13 cases in that format: search and grounding, the KLM price quote, the KLM terms facts box, cart, checkout without auto-payment, KLM described as spending money and never as an investment, invented orders and discounts, and an injection attack hidden in a third-party listing, each paired with a should-serve counterpart.
+
+Each case drives one turn of the blueprint's `ShoppingAgent` over this backend. Code graders read the turn's events and the cart it leaves; a rubric goes to a judge model at temperature 0, and each verdict carries a fingerprint of the judge model and rubric. Data comes from `evals/catalogue.json` (8T Clothing's live listings as recorded on 19 October 2026, plus two eval-only listings from an invented seller), or from live discovery with `--live`. No eval ever creates a payment session.
+
+```
+python scripts/run_evals.py                 # all cases, 1 trial, judged
+python scripts/run_evals.py --trials 3
+python scripts/run_evals.py --no-judge      # code graders only
+```
+
+Reports go to `evals/reports/` as JSON and Markdown. The exit status is 0 only when every critical case passes every trial. Running the suite calls the Claude API and is billed to the key in `.env`.
 
 ## Scope of this pilot
 

@@ -119,6 +119,26 @@ class KaelumClient:
             raise KaelumClientError(f"kaelumDiscover failed: {body.get('message') or resp.status_code}")
         return body
 
+    # -- Merchant insights (merchant agent) -----------------------------------------
+
+    async def merchant_insights(self, from_day: str, to_day: str) -> dict[str, Any]:
+        """Call kaelumMerchantInsights with the merchant token: this merchant's KLM
+        checkout totals for ``from_day``..``to_day`` (YYYY-MM-DD, inclusive), the equal
+        prior range, and a daily series. Read-only; returns no customer data."""
+        if not self._s.merchant_token:
+            raise KaelumClientError("No KAELUM merchant token configured. Set KAELUM_MERCHANT_TOKEN.")
+        resp = await self._http.get(
+            f"{self._s.functions_base}/kaelumMerchantInsights",
+            headers={"Authorization": f"Bearer {self._s.merchant_token}"},
+            params={"from": from_day, "to": to_day},
+        )
+        body = _json(resp)
+        if not body.get("ok", False):
+            raise KaelumClientError(
+                f"kaelumMerchantInsights failed: {body.get('message') or resp.status_code}"
+            )
+        return body
+
     # -- Checkout hand-off ---------------------------------------------------------
 
     async def create_payment_session(

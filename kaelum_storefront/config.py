@@ -20,6 +20,9 @@ from shopping_agent import ShoppingAgentConfig
 
 from .client import KaelumSettings
 
+# Claude Sonnet 5.5: the standard tier for KAELUM agents. Override with KAELUM_AGENT_MODEL.
+DEFAULT_MODEL = "claude-sonnet-5-5"
+
 
 def _clean_token(raw: str | None) -> str | None:
     """Strip stray spaces and quotes, and catch the usual paste mix-ups early with a plain
@@ -58,9 +61,16 @@ def settings_from_env() -> KaelumSettings:
     )
 
 
-def build_kaelum_shopping_config(brand_name: str = "KAELUM") -> ShoppingAgentConfig:
+def build_kaelum_shopping_config(
+    brand_name: str = "KAELUM", model: str | None = None
+) -> ShoppingAgentConfig:
+    model = model or os.environ.get("KAELUM_AGENT_MODEL") or DEFAULT_MODEL
+    extra = {"model": model} if model else {}
     return ShoppingAgentConfig(
+        **extra,
         brand_name=brand_name,
+        # No shopper memory in this pilot: nothing about a guest is kept between sessions.
+        enable_memory=False,
         assistant_name="the KAELUM shopping assistant",
         brand_voice="confident, plain about the KLM discount, and honest about trade-offs",
         # The KLM discount is a merchant-side discount on goods when a shopper spends
