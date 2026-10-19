@@ -33,6 +33,7 @@ authoritative charge stays with the KAELUM session at checkout.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import uuid
 from typing import Any
@@ -227,6 +228,28 @@ class KaelumStorefrontBackend(StorefrontBackend):
         return [CheckoutHandoff(url=body["gateway_url"], label="Pay with KAELUM")]
 
     # -- Customer context ----------------------------------------------------------
+
+    async def get_account_context(self, session: ShoppingSessionContext) -> dict[str, Any] | None:
+        """KAELUM's terms for KLM, sent with every request so the agent answers questions
+        about KLM itself from these facts rather than guessing. The price comes from
+        discovery (read server-side from TokenPricing), never from this file."""
+        if self._klm_price_gbp is None:
+            # The facts below still hold if discovery is unreachable; only the figure is lost.
+            with contextlib.suppress(Exception):
+                self._note_price(await self._client.discover(query="", limit=1))
+        price = f"£{self._klm_price_gbp:.2f}" if self._klm_price_gbp else "a fixed price"
+        return {
+            "klm_terms": (
+                f"KLM is the KAELUM commerce currency, for spending with KAELUM merchants "
+                f"and creators. One KLM costs {price}, a fixed price that does not go up "
+                "or down. KLM is not an investment, earns no return and is not worth "
+                "holding or buying in bulk for gain; never suggest otherwise. Customers "
+                "buy KLM at full price; the saving is the merchant's discount on goods "
+                "(at least 6%) when they spend KLM. A 4.5% platform fee is added at "
+                "checkout. The shopper always confirms payment themselves on kaelum.app."
+            )
+        }
+
 
     async def get_preferences(self, session: ShoppingSessionContext) -> UserPreferences:
         # No account is read for a discovery-and-hand-off pilot; a guest profile keeps

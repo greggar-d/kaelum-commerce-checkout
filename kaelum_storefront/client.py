@@ -113,7 +113,7 @@ class KaelumClient:
             params["merchant_ref"] = ref
         elif self._s.site_key:
             params["siteKey"] = self._s.site_key
-        resp = await self._http.get(f"{self._s.functions_base}/kaelumDiscover", params=params)
+        resp = await _get_with_retry(self._http, f"{self._s.functions_base}/kaelumDiscover", params=params)
         body = _json(resp)
         if not body.get("ok", False):
             raise KaelumClientError(f"kaelumDiscover failed: {body.get('message') or resp.status_code}")
@@ -127,7 +127,8 @@ class KaelumClient:
         prior range, and a daily series. Read-only; returns no customer data."""
         if not self._s.merchant_token:
             raise KaelumClientError("No KAELUM merchant token configured. Set KAELUM_MERCHANT_TOKEN.")
-        resp = await self._http.get(
+        resp = await _get_with_retry(
+            self._http,
             f"{self._s.functions_base}/kaelumMerchantInsights",
             headers={"Authorization": f"Bearer {self._s.merchant_token}"},
             params={"from": from_day, "to": to_day},
@@ -193,6 +194,33 @@ class KaelumClient:
                 f"createUniversalPaymentSession failed: {body.get('message') or resp.status_code}"
             )
         return body
+
+
+RETRY_DELAYS_S = (2.0, 5.0, 10.0)
+
+
+def _rate_limited(resp: httpx.Response, body: dict[str, Any] | None) -> bool:
+    if resp.status_code == 429:
+        return True
+    text = str((body or {}).get("message") or (body or {}).get("error") or "")
+    return "rate limit" in text.lower()
+
+
+async def _get_with_retry(http: httpx.AsyncClient, url: str, **kwargs: Any) -> httpx.Response:
+    """GET, waiting and retrying briefly when KAELUM says the rate limit was hit."""
+    import asyncio
+
+    resp = await http.get(url, **kwargs)
+    for delay in RETRY_DELAYS_S:
+        try:
+            body = resp.json()
+        except Exception:  # noqa: BLE001
+            body = None
+        if not _rate_limited(resp, body if isinstance(body, dict) else None):
+            return resp
+        await asyncio.sleep(delay)
+        resp = await http.get(url, **kwargs)
+    return resp
 
 
 def _json(resp: httpx.Response) -> dict[str, Any]:

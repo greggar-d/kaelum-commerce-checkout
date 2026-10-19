@@ -200,3 +200,12 @@ def test_merchant_agent_runs_a_turn_over_kaelum(session):
     assert results and results[0]["tool"] == "get_business_snapshot"
     assert results[0]["status"] == "ok"
     assert "57.4" in "".join(e.data.get("text", "") for e in events if e.type == "text_delta")
+
+
+def test_insights_are_read_once_per_period(session):
+    fake = FakeClient()
+    backend = KaelumMerchantBackend(fake)
+    _run(backend.get_business_snapshot(session))
+    _run(backend.query_metrics(session, "sales"))
+    _run(backend.query_metrics(session, "orders", granularity="week"))
+    assert len(fake.insight_calls) == 1

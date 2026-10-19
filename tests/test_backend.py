@@ -307,3 +307,32 @@ def test_token_cleaning_and_mixups():
     for wrong in ("kmr_123", "wix_abc", "shop_abc", "6a9a7b2e00deaaa06316222a"):
         with pytest.raises(ValueError):
             _clean_token(wrong)
+
+
+def test_account_context_carries_fixed_klm_terms(session):
+    backend = KaelumStorefrontBackend(FakeClient())
+    ctx = _run(backend.get_account_context(session))
+    terms = ctx["klm_terms"]
+    assert "£0.20" in terms  # read from discovery, not hardcoded
+    assert "not an investment" in terms and "does not go up" in terms
+
+
+def test_rate_limited_request_is_retried(monkeypatch):
+    import kaelum_storefront.client as client_mod
+
+    monkeypatch.setattr(client_mod, "RETRY_DELAYS_S", (0.0, 0.0))
+    calls = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(500, json={"ok": False, "message": "Insights are temporarily unavailable (Rate limit exceeded)"})
+        return httpx.Response(200, json={"ok": True, "products": [], "merchants": []})
+
+    async def go():
+        c = _client(handler, site_key="wix_8t")
+        body = await c.discover("tee")
+        await c.aclose()
+        return body
+
+    assert _run(go())["ok"] is True and calls["n"] == 2

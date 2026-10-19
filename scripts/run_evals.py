@@ -93,8 +93,10 @@ async def main(args: argparse.Namespace) -> int:
             if out.error:
                 print(f"       run error: {out.error[:300]}")
             for c in checks:
-                if c["check"] == "rubric" and c["passed"] is None:
-                    print(f"       {c['detail'][:300]}")
+                if c["passed"] is not True:
+                    print(f"       {c['check']}: {str(c.get('detail', ''))[:300]}")
+            if not passed and out.reply:
+                print(f"       reply: {out.reply[:300]}")
             await data_client.aclose()
     meta = {
         "started": started, "agent_model": args.model,

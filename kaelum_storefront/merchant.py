@@ -137,14 +137,19 @@ class KaelumMerchantBackend(MerchantBackend):
         self._config = config or build_kaelum_merchant_config()
         self.ledger = ChangeLedger(self._config)
         self._catalog: dict[str, dict[str, Any]] = {}
+        # One insights read per period per briefing: the agent often asks for the
+        # snapshot and several series over the same range.
+        self._insights_cache: dict[tuple[str, str], dict[str, Any]] = {}
 
     # -- Performance -----------------------------------------------------------------
 
     async def _insights(self, session: MerchantSessionContext, period: str | None):
         today = (session.now or datetime.now(UTC)).date()
         start, end, label = resolve_period(period, today)
-        body = await self._client.merchant_insights(start.isoformat(), end.isoformat())
-        return body, label
+        key = (start.isoformat(), end.isoformat())
+        if key not in self._insights_cache:
+            self._insights_cache[key] = await self._client.merchant_insights(*key)
+        return self._insights_cache[key], label
 
     async def get_business_snapshot(
         self, session: MerchantSessionContext, period: str | None = None
