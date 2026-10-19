@@ -245,7 +245,10 @@ class KaelumStorefrontBackend(StorefrontBackend):
                 "or down. KLM is not an investment, earns no return and is not worth "
                 "holding or buying in bulk for gain; never suggest otherwise. Customers "
                 "buy KLM at full price; the saving is the merchant's discount on goods "
-                "(at least 6%) when they spend KLM. A 4.5% platform fee is added at "
+                "when they spend KLM. Every merchant gives at least 6% and many give "
+                "more: always quote the product's own discount_pct from its attributes, "
+                "never the 6% minimum, and never promise a bigger discount or a code "
+                "that is not in the product data. A 4.5% platform fee is added at "
                 "checkout. The shopper always confirms payment themselves on kaelum.app."
             )
         }

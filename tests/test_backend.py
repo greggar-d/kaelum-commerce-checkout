@@ -315,6 +315,7 @@ def test_account_context_carries_fixed_klm_terms(session):
     terms = ctx["klm_terms"]
     assert "£0.20" in terms  # read from discovery, not hardcoded
     assert "not an investment" in terms and "does not go up" in terms
+    assert "discount_pct" in terms  # quote the product's own discount, not the 6% floor
 
 
 def test_rate_limited_request_is_retried(monkeypatch):

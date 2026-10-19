@@ -272,6 +272,10 @@ class KaelumMerchantBackend(MerchantBackend):
         else:
             records = await self._listings()
         listings = [self._to_listing(r) for r in records]
+        if filters and (filters.content_quality is not None or filters.max_stock is not None):
+            # KAELUM rates no listing content and holds no stock counts, so these filters
+            # match nothing; returning everything would read as every listing qualifying.
+            return []
         if filters:
             if filters.status:
                 listings = [x for x in listings if x.status == filters.status]

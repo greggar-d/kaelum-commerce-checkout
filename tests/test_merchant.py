@@ -212,3 +212,12 @@ def test_insights_are_read_once_per_period(session):
     _run(backend.query_metrics(session, "sales"))
     _run(backend.query_metrics(session, "orders", granularity="week"))
     assert len(fake.insight_calls) == 1
+
+
+def test_unsupported_filters_match_nothing(session):
+    from merchant_agent import ListingFilters
+
+    backend = KaelumMerchantBackend(FakeClient())
+    assert _run(backend.search_listings(session, "", ListingFilters(content_quality="poor"))) == []
+    assert _run(backend.search_listings(session, "", ListingFilters(max_stock=5))) == []
+    assert len(_run(backend.search_listings(session, "", ListingFilters(status="out_of_stock")))) == 1
