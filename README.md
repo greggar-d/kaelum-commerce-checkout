@@ -14,6 +14,7 @@ Three live KAELUM endpoints do the work. The first two already back the KAELUM W
 | --- | --- | --- |
 | `search_products`, `get_product_details` | `kaelumDiscover` | Read-only network discovery. Returns live KAELUM merchants and in-stock products, each priced in KLM at the discount checkout applies. Moves no money, reads no account. |
 | `checkout_handoff` | `createUniversalPaymentSession` | Takes a merchant Bearer token and a gross GBP amount, returns a hosted gateway URL. The customer completes the KLM spend on kaelum.app, where a human confirms it. |
+| `get_disclosure` | `kaelumDiscover` (same record) | The "Paying with KLM" facts box: price, merchant discount, platform fee, total, KLM to spend and the fixed KLM price, all from the figures discovery returned. Nothing is hardcoded. |
 | (identity) | `kaelumWhoAmI` | Takes the merchant Bearer token and returns that merchant's public `merchant_ref`. Called once and cached. |
 
 The blueprint calls `checkout_handoff` after the model's `checkout` tool call and pins the returned URL onto the checkout card. The model never sees or supplies the URL, which matches KAELUM's own posture: an agent may stage the order, but a human confirms the spend on kaelum.app.
@@ -22,11 +23,11 @@ The blueprint calls `checkout_handoff` after the model's `checkout` tool call an
 
 Every KAELUM merchant has one public reference, `merchant_ref` (`kmr_...`). It appears on every merchant and product in discovery, it is what `kaelumWhoAmI` returns for a merchant token, and `createUniversalPaymentSession` refuses (409 `MERCHANT_MISMATCH`) any session whose `merchant_ref` is not the merchant the token pays.
 
-This backend resolves its `merchant_ref` from the token, scopes discovery to it, and sends it with every checkout. So an agent selling for one store only ever sees that store's products, and a cart can never settle to another merchant's account. A cart mixing merchants is refused before any session is created.
+This backend resolves its `merchant_ref` from the token, scopes discovery to it, and sends it with every checkout. So an agent selling for one store only ever sees that store's products, and a cart can never settle to another merchant's account. Before any session is created, the backend refuses a cart that mixes merchants, holds an item with no `merchant_ref`, or holds another merchant's items. Each hand-off gets a unique order id, and the discount sent to the session is the cart's own merchant's rate.
 
 ## Money maths, so it reconciles
 
-The catalogue shows the gross GBP price. KAELUM applies the merchant discount itself, floored at 6 percent, when the session is created, so this backend passes the gross amount to the session and never a pre-discounted figure. Passing a net figure would discount twice. The KLM units, net price and discount for each product travel in the product's attributes, so the agent can tell the shopper what they pay in KLM and what they save while the authoritative charge stays with the KAELUM session. The backend also passes the merchant's discount to the session explicitly, so the discount quoted in discovery equals the discount charged at checkout.Discovery's klm_units is the all-in amount the shopper pays: the discounted price plus the 4.5% KAELUM platform fee, which the buyer pays on top. The merchant receives the full discounted amount.
+The catalogue shows the gross GBP price. KAELUM applies the merchant discount itself, floored at 6 percent, when the session is created, so this backend passes the gross amount to the session and never a pre-discounted figure. Passing a net figure would discount twice. The KLM units, net price and discount for each product travel in the product's attributes, so the agent can tell the shopper what they pay in KLM and what they save while the authoritative charge stays with the KAELUM session. The backend also passes the merchant's discount to the session explicitly, so the discount quoted in discovery equals the discount charged at checkout. A record that carries only a net price is grossed back up by its own discount, so it is never discounted twice. Discovery's klm_units is the all-in amount the shopper pays: the discounted price plus the 4.5% KAELUM platform fee, which the buyer pays on top. The merchant receives the full discounted amount.
 
 ## Install
 
@@ -73,7 +74,7 @@ pytest -q
 
 ## Scope of this pilot
 
-This is the blueprint's sanctioned minimal shape: implement search and product details, and switch off what the store does not serve. Cart and checkout are on. Orders, policies and fulfillment are off in `build_kaelum_shopping_config`, because KAELUM discovery does not serve those today; their tools are removed on every path.
+This is the blueprint's sanctioned minimal shape: implement search and product details, and switch off what the store does not serve. Cart, checkout and the KLM terms facts box are on. The agent is told to show the facts box before the shopper pays. Orders, policies and fulfillment are off in `build_kaelum_shopping_config`, because KAELUM discovery does not serve those today; their tools are removed on every path.
 
 ## Known seams to close before production
 
@@ -81,7 +82,7 @@ These are deliberate scaffold simplifications, not blockers for a demo. They are
 
 1. ~~**Two merchant identity systems.**~~ Closed in October 2026. Discovery, `kaelumWhoAmI` and payment sessions now share one `merchant_ref`; see "One merchant identity" above.
 2. **Single-merchant scope.** One deployment sells for one store (one `MerchantToken`). A multi-seller cart would create one session per seller and return one `CheckoutHandoff` per seller, which the blueprint already supports through the `seller` field.
-3. **No product id or single-product lookup in discovery.** This backend derives a stable id from each product's canonical URL and caches the record. A production catalogue would expose a real id and a single-product read.
+3. **No product id or single-product lookup in discovery.** This backend derives a stable id from each product's canonical URL and caches the record. A cold lookup now pages through the whole of discovery (to a cap) instead of reading only the first page. A production catalogue would still expose a real id and a single-product read.
 4. **GBP only.** KAELUM settles in GBP. A cart in any other currency is refused at hand-off rather than converted silently.
 
 ## Licence

@@ -16,6 +16,7 @@ search and product details and stub the rest"):
   search_products / get_product_details   -> kaelumDiscover
   get_cart / add / update / remove        -> in-process cart, one per session
   checkout_handoff                        -> createUniversalPaymentSession
+  get_disclosure                          -> the KLM terms facts box, from discovery
   orders / policies / fulfillment         -> switched off in config; the methods are
                                              implemented as empty so the class is
                                              concrete, but their tools are removed and
@@ -33,12 +34,15 @@ authoritative charge stays with the KAELUM session at checkout.
 from __future__ import annotations
 
 import hashlib
+import uuid
 from typing import Any
 
 from shopping_agent import (
     Cart,
     CartItem,
     CheckoutHandoff,
+    Disclosure,
+    DisclosureRow,
     FulfillmentOption,
     Order,
     Policy,
@@ -54,6 +58,9 @@ from shopping_agent import (
 from .client import KaelumClient
 
 CURRENCY = "GBP"
+# Cold lookups page through discovery in this size, up to this many records.
+_PAGE = 24
+_WARM_CAP = 480
 
 
 def _product_id_for(record: dict[str, Any]) -> str:
@@ -73,10 +80,9 @@ class KaelumStorefrontBackend(StorefrontBackend):
         # details can reach canonical_url, the KLM figures and the merchant discount.
         self._catalog: dict[str, dict[str, Any]] = {}
         self._carts: dict[str, list[CartItem]] = {}
-        # The merchant discount fraction last seen in discovery. Passed to the session
-        # so the charged discount equals the quoted one. None means let the server apply
-        # its own configured rate.
-        self._merchant_discount_fraction: float | None = None
+        # The KLM unit price discovery last reported (read server-side from
+        # TokenPricing). Used only to label the facts box; never hardcoded here.
+        self._klm_price_gbp: float | None = None
 
     # -- Catalog: KAELUM discovery -------------------------------------------------
 
@@ -89,6 +95,7 @@ class KaelumStorefrontBackend(StorefrontBackend):
     ) -> list[Product]:
         category = filters.category if filters else None
         body = await self._client.discover(query=query, category=category, limit=limit)
+        self._note_price(body)
         products = [self._to_product(rec) for rec in body.get("products", [])]
         products = [p for p in products if p is not None]
         if filters:
@@ -179,24 +186,37 @@ class KaelumStorefrontBackend(StorefrontBackend):
             raise Unavailable(
                 f"KAELUM settles in {CURRENCY}; this cart is in {cart.currency}."
             )
-        # One merchant per session. Every item carries the merchant_ref discovery gave it;
-        # a mixed cart is refused here rather than settled to one merchant's account.
-        refs = {
-            (self._catalog.get(i.product_id) or {}).get("merchant_ref") for i in cart.items
-        }
-        refs.discard(None)
+        # One merchant per session. Every line must carry the merchant_ref discovery gave
+        # it, and it must be the merchant this deployment sells for. A line with no ref,
+        # or another merchant's ref, is refused here rather than settled to the token's
+        # account.
+        records = [self._catalog.get(i.product_id) or {} for i in cart.items]
+        refs = {rec.get("merchant_ref") for rec in records}
+        if None in refs:
+            raise Unavailable(
+                "An item in this cart has no KAELUM merchant reference, so it cannot be "
+                "checked out here."
+            )
         if len(refs) > 1:
             raise Unavailable(
                 "This cart holds items from more than one KAELUM merchant. "
                 "Check out each merchant's items separately."
             )
-        merchant_ref = next(iter(refs), None)
-        order_id = f"cca-{session.session_id[:12]}-{cart.item_count}"
+        merchant_ref = next(iter(refs))
+        own_ref = await self._client.merchant_ref()
+        if own_ref and merchant_ref != own_ref:
+            raise Unavailable("These items belong to a different KAELUM merchant.")
+        # The discount this merchant's records were quoted at, passed as a fraction so
+        # the charged discount equals the quoted one. Absent, the server applies its own.
+        discount = _num(records[0].get("discount_pct"))
+        discount_fraction = round(discount / 100.0, 4) if discount and discount > 0 else None
+        # Unique per hand-off, so a second checkout in one session never reuses an id.
+        order_id = f"cca-{session.session_id[:12]}-{uuid.uuid4().hex[:10]}"
         summary = ", ".join(f"{i.quantity} x {i.title}" for i in cart.items)[:280]
         body = await self._client.create_payment_session(
             order_id=order_id,
             amount_gbp=cart.subtotal,
-            discount_pct=self._merchant_discount_fraction,
+            discount_pct=discount_fraction,
             merchant_ref=merchant_ref,
             metadata={
                 "platform": "claude-commerce-agents",
@@ -212,6 +232,79 @@ class KaelumStorefrontBackend(StorefrontBackend):
         # No account is read for a discovery-and-hand-off pilot; a guest profile keeps
         # the agent's per-turn read cheap.
         return UserPreferences(user_id=session.user_id, default_location="United Kingdom")
+
+    # -- Disclosure: the KLM terms for one product -----------------------------------
+
+    async def get_disclosure(
+        self, session: ShoppingSessionContext, product_id: str
+    ) -> Disclosure | None:
+        """A facts box with the shopper's KLM terms for one product, built only from the
+        figures discovery returned for it. Nothing is computed from a hardcoded price or
+        fee rate: the fee percentage is derived from the platform's own fee and net
+        figures, and the KLM unit price comes from discovery."""
+        record = self._catalog.get(product_id)
+        if record is None:
+            return None
+        rows: list[DisclosureRow] = []
+        rrp = _num(record.get("rrp_gbp"))
+        disc = _num(record.get("discount_pct"))
+        net = _num(record.get("net_gbp"))
+        fee = _num(record.get("fee_gbp"))
+        total = _num(record.get("total_gbp"))
+        klm = _num(record.get("klm_units"))
+        if rrp is not None:
+            rows.append(DisclosureRow(label="Price", value=f"£{rrp:.2f}"))
+        if disc is not None:
+            rows.append(
+                DisclosureRow(
+                    label="KLM discount",
+                    value=f"{disc:g}%",
+                    note="A merchant discount on these goods when you pay in KLM.",
+                )
+            )
+        if net is not None:
+            rows.append(DisclosureRow(label="Price after discount", value=f"£{net:.2f}"))
+        if fee is not None:
+            fee_note = "Paid by the buyer on top of the discounted price."
+            if net:
+                rows.append(
+                    DisclosureRow(
+                        label="KAELUM platform fee",
+                        value=f"£{fee:.2f} ({fee / net * 100:.1f}%)",
+                        note=fee_note,
+                    )
+                )
+            else:
+                rows.append(DisclosureRow(label="KAELUM platform fee", value=f"£{fee:.2f}", note=fee_note))
+        if total is not None:
+            rows.append(DisclosureRow(label="Total to pay", value=f"£{total:.2f}"))
+        if klm is not None:
+            rows.append(DisclosureRow(label="KLM to spend", value=f"{klm:g} KLM"))
+        if self._klm_price_gbp:
+            rows.append(
+                DisclosureRow(
+                    label="KLM price", value=f"£{self._klm_price_gbp:.2f} per KLM", note="Fixed."
+                )
+            )
+        if not rows:
+            return None
+        return Disclosure(
+            title="Paying with KLM",
+            product_id=product_id,
+            rows=rows,
+            sources=[str(record["canonical_url"])] if record.get("canonical_url") else [],
+            footnotes=[
+                "The discount applies to the goods, never to the price of KLM.",
+                (
+                    "KLM is the KAELUM commerce currency for spending with KAELUM merchants. "
+                    "It is not an investment and its price does not change."
+                ),
+                (
+                    "You confirm the payment yourself on kaelum.app; the assistant cannot "
+                    "pay for you."
+                ),
+            ],
+        )
 
     # -- Switched-off systems ------------------------------------------------------
     # These are disabled in config (enable_orders / enable_policies / enable_fulfillment
@@ -235,9 +328,24 @@ class KaelumStorefrontBackend(StorefrontBackend):
     # -- Internals -----------------------------------------------------------------
 
     async def _warm_catalog(self) -> None:
-        body = await self._client.discover(query="", limit=24)
-        for rec in body.get("products", []):
-            self._to_product(rec)
+        """Page through the whole of discovery (to a cap) so a cold id resolves even when
+        its product sits past the first page."""
+        offset = 0
+        while offset < _WARM_CAP:
+            body = await self._client.discover(query="", limit=_PAGE, offset=offset)
+            self._note_price(body)
+            page = body.get("products", []) or []
+            for rec in page:
+                self._to_product(rec)
+            total = body.get("product_count")
+            offset += len(page)
+            if len(page) < _PAGE or (isinstance(total, int) and offset >= total):
+                break
+
+    def _note_price(self, body: dict[str, Any]) -> None:
+        price = _num(body.get("klm_price_gbp"))
+        if price and price > 0:
+            self._klm_price_gbp = price
 
     def _to_product(self, record: dict[str, Any]) -> Product | None:
         if not isinstance(record, dict):
@@ -246,11 +354,6 @@ class KaelumStorefrontBackend(StorefrontBackend):
         self._catalog[pid] = record
 
         disc_pct = record.get("discount_pct")
-        if isinstance(disc_pct, (int, float)) and disc_pct > 0:
-            # Discovery reports the merchant rate as a percent; store it as the fraction
-            # the session expects, so quote and charge line up. A single-merchant pilot
-            # sells one store's goods, so the last seen rate is that store's.
-            self._merchant_discount_fraction = round(float(disc_pct) / 100.0, 4)
 
         attributes: dict[str, str] = {"pay_in": "KLM"}
         for key in ("rrp_gbp", "net_gbp", "fee_gbp", "total_gbp", "klm_units", "discount_pct"):
@@ -279,16 +382,25 @@ class KaelumStorefrontBackend(StorefrontBackend):
         )
 
 
+def _num(val: Any) -> float | None:
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        return None
+    return float(val)
+
+
 def _gross_gbp(record: dict[str, Any]) -> float:
-    """The gross GBP price: rrp when present, else the net grossed back up is not
-    attempted; net is used only as a last resort so a record without rrp is still
-    buyable. KAELUM applies the discount at the session either way."""
-    rrp = record.get("rrp_gbp")
-    if isinstance(rrp, (int, float)) and rrp > 0:
-        return round(float(rrp), 2)
-    net = record.get("net_gbp")
-    if isinstance(net, (int, float)) and net > 0:
-        return round(float(net), 2)
+    """The gross GBP price. KAELUM applies the merchant discount at the session, so the
+    cart must hold gross. Use rrp when present; otherwise gross the net price back up by
+    the record's own discount, so a net-only record is never discounted twice."""
+    rrp = _num(record.get("rrp_gbp"))
+    if rrp and rrp > 0:
+        return round(rrp, 2)
+    net = _num(record.get("net_gbp"))
+    if net and net > 0:
+        disc = _num(record.get("discount_pct")) or 0.0
+        if 0 < disc < 100:
+            return round(net / (1 - disc / 100.0), 2)
+        return round(net, 2)
     return 0.0
 
 

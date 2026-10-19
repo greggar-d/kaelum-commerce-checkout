@@ -45,6 +45,9 @@ class FakeClient:
     async def discover(self, query: str = "", category=None, limit: int = 8, offset: int = 0):
         return DISCOVER_BODY
 
+    async def merchant_ref(self):
+        return "kmr_8t"
+
     async def create_payment_session(self, **kwargs):
         self.session_calls.append(kwargs)
         return {"ok": True, "gateway_url": "https://kaelum.app/gateway-checkout?session=klm_sess_test"}
@@ -205,3 +208,91 @@ def test_merchant_mismatch_surfaces_as_client_error():
 
     with pytest.raises(KaelumClientError):
         _run(go())
+
+
+# -- October 2026 hardening ----------------------------------------------------------
+
+
+def test_order_ids_are_unique_per_handoff(session):
+    fake = FakeClient()
+    backend = KaelumStorefrontBackend(fake)
+    products = _run(backend.search_products(session, "tee"))
+    _run(backend.add_to_cart(session, products[0].product_id, 1))
+    cart = _run(backend.get_cart(session))
+    _run(backend.checkout_handoff(session, cart))
+    _run(backend.checkout_handoff(session, cart))
+    ids = [c["order_id"] for c in fake.session_calls]
+    assert len(set(ids)) == 2
+
+
+def test_item_without_merchant_ref_is_refused(session):
+    from shopping_agent import Cart, CartItem
+
+    backend = KaelumStorefrontBackend(FakeClient())
+    backend._catalog["klm-n"] = {"title": "No ref"}
+    cart = Cart(items=[CartItem(product_id="klm-n", title="N", price=10.0, quantity=1)], currency="GBP")
+    with pytest.raises(Unavailable):
+        _run(backend.checkout_handoff(session, cart))
+
+
+def test_other_merchants_items_are_refused(session):
+    from shopping_agent import Cart, CartItem
+
+    backend = KaelumStorefrontBackend(FakeClient())  # sells for kmr_8t
+    backend._catalog["klm-o"] = {"merchant_ref": "kmr_other"}
+    cart = Cart(items=[CartItem(product_id="klm-o", title="O", price=10.0, quantity=1)], currency="GBP")
+    with pytest.raises(Unavailable):
+        _run(backend.checkout_handoff(session, cart))
+
+
+def test_net_only_record_is_grossed_up_not_discounted_twice():
+    from kaelum_storefront.backend import _gross_gbp
+
+    assert _gross_gbp({"net_gbp": 28.7, "discount_pct": 18}) == 35.0
+    assert _gross_gbp({"rrp_gbp": 35, "net_gbp": 28.7, "discount_pct": 18}) == 35.0
+
+
+def test_cold_lookup_pages_past_the_first_page(session):
+    def rec(i):
+        return {
+            "title": f"Tee {i}",
+            "rrp_gbp": 35,
+            "discount_pct": 18,
+            "canonical_url": f"https://8tclothing.com/p/{i}",
+            "availability": "IN_STOCK",
+            "merchant_ref": "kmr_8t",
+        }
+
+    catalogue = [rec(i) for i in range(65)]
+
+    class PagingClient(FakeClient):
+        async def discover(self, query="", category=None, limit=8, offset=0):
+            return {"ok": True, "product_count": 65, "products": catalogue[offset : offset + limit]}
+
+    from kaelum_storefront.backend import _product_id_for
+
+    backend = KaelumStorefrontBackend(PagingClient())
+    target = _product_id_for(catalogue[60])
+    details = _run(backend.get_product_details(session, target))
+    assert details is not None and details.title == "Tee 60"
+
+
+def test_disclosure_uses_live_figures(session):
+    body = dict(DISCOVER_BODY)
+    body["products"] = [dict(DISCOVER_BODY["products"][0], fee_gbp=1.24, total_gbp=28.84)]
+
+    class Client(FakeClient):
+        async def discover(self, **kw):
+            return body
+
+    backend = KaelumStorefrontBackend(Client())
+    products = _run(backend.search_products(session, "tee"))
+    d = _run(backend.get_disclosure(session, products[0].product_id))
+    assert d is not None
+    rows = {r.label: r.value for r in d.rows}
+    assert rows["Price"] == "£30.00"
+    assert rows["KLM discount"] == "8%"
+    assert rows["Total to pay"] == "£28.84"
+    assert rows["KLM price"] == "£0.20 per KLM"  # from discovery, not hardcoded
+    assert "4.5%" in rows["KAELUM platform fee"]
+    assert _run(backend.get_disclosure(session, "klm-unknown0")) is None

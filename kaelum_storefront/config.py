@@ -5,7 +5,8 @@
 """Environment-driven settings and the KAELUM shopping-agent config.
 
 ``settings_from_env`` reads the deployment knobs. ``build_kaelum_shopping_config``
-returns a ``ShoppingAgentConfig`` for a KAELUM-network pilot: cart and checkout on,
+returns a ``ShoppingAgentConfig`` for a KAELUM-network pilot: cart, checkout and the
+KLM terms facts box (disclosures) on,
 orders and policies and fulfillment off (KAELUM discovery does not serve those yet),
 and the id pattern extended so the catalog grounding gate fires on ``klm-XXXXXXXX`` ids.
 """
@@ -47,8 +48,11 @@ def build_kaelum_shopping_config(brand_name: str = "KAELUM") -> ShoppingAgentCon
             "currency. The listed price is the gross price in pounds; the attributes "
             "carry the KLM units and the merchant discount the shopper receives when "
             "they pay in KLM. Present the KLM price and the saving, never a price change "
-            "on KLM itself."
+            "on KLM itself. When a shopper is close to buying, show the KLM terms for "
+            "the product with present_disclosure so they see the fee and the total "
+            "before they pay."
         ),
+        enable_disclosures=True,
         enable_cart=True,
         enable_orders=False,
         enable_policies=False,
