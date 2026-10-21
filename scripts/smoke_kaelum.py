@@ -34,7 +34,7 @@ async def main(query: str) -> None:
     for p in products:
         klm = p.attributes.get("klm_units", "?")
         disc = p.attributes.get("discount_pct", "?")
-        print(f"  {p.product_id}  {p.title[:48]:<48}  gross £{p.price:<8}  {klm} KLM  {disc}% off")
+        print(f"  {p.product_id}  {p.title[:48]:<48}  gross £{p.price:<8}  {klm} KAE  {disc}% off")
 
     if not products:
         print("\nNo live products returned. The network may be in controlled onboarding.")

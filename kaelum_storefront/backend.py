@@ -8,7 +8,7 @@ KAELUM.
 The shopping agent from anthropics/commerce-agents reaches a store through a single
 ``StorefrontBackend``. This class implements that surface so a Claude shopping agent
 can browse the KAELUM acceptance network as its catalogue and hand off checkout to
-KAELUM, where the customer completes the spend in KLM.
+KAELUM, where the customer completes the spend in KAE.
 
 Scope of this pilot backend (the blueprint's sanctioned minimal shape, "implement
 search and product details and stub the rest"):
@@ -16,18 +16,18 @@ search and product details and stub the rest"):
   search_products / get_product_details   -> kaelumDiscover
   get_cart / add / update / remove        -> in-process cart, one per session
   checkout_handoff                        -> createUniversalPaymentSession
-  get_disclosure                          -> the KLM terms facts box, from discovery
+  get_disclosure                          -> the KAE terms facts box, from discovery
   orders / policies / fulfillment         -> switched off in config; the methods are
                                              implemented as empty so the class is
                                              concrete, but their tools are removed and
                                              they are never reached.
 
-Currency is GBP throughout. KAELUM settles in GBP and prices in KLM; a cart in any
+Currency is GBP throughout. KAELUM settles in GBP and prices in KAE; a cart in any
 other currency is refused at hand-off rather than converted silently.
 
-The catalogue price shown to the shopper is the gross GBP price (``rrp_gbp``). The KLM
+The catalogue price shown to the shopper is the gross GBP price (``rrp_gbp``). The KAE
 figures (units, net price, discount) travel in the product's attributes and labels so
-the agent can tell the shopper what they pay in KLM and what they save, while the
+the agent can tell the shopper what they pay in KAE and what they save, while the
 authoritative charge stays with the KAELUM session at checkout.
 """
 
@@ -78,10 +78,10 @@ class KaelumStorefrontBackend(StorefrontBackend):
     def __init__(self, client: KaelumClient) -> None:
         self._client = client
         # Provenance-friendly caches. The discovered record is kept so hand-off and
-        # details can reach canonical_url, the KLM figures and the merchant discount.
+        # details can reach canonical_url, the KAE figures and the merchant discount.
         self._catalog: dict[str, dict[str, Any]] = {}
         self._carts: dict[str, list[CartItem]] = {}
-        # The KLM unit price discovery last reported (read server-side from
+        # The KAE unit price discovery last reported (read server-side from
         # TokenPricing). Used only to label the facts box; never hardcoded here.
         self._klm_price_gbp: float | None = None
 
@@ -178,7 +178,7 @@ class KaelumStorefrontBackend(StorefrontBackend):
 
         This is the whole money seam. The blueprint's executor calls this after the
         model's ``checkout`` tool call, pins the returned URL onto the checkout card,
-        and the customer completes the KLM spend on kaelum.app. The model never sees the
+        and the customer completes the KAE spend on kaelum.app. The model never sees the
         URL.
         """
         if not cart.items:
@@ -230,8 +230,8 @@ class KaelumStorefrontBackend(StorefrontBackend):
     # -- Customer context ----------------------------------------------------------
 
     async def get_account_context(self, session: ShoppingSessionContext) -> dict[str, Any] | None:
-        """KAELUM's terms for KLM, sent with every request so the agent answers questions
-        about KLM itself from these facts rather than guessing. The price comes from
+        """KAELUM's terms for KAE, sent with every request so the agent answers questions
+        about KAE itself from these facts rather than guessing. The price comes from
         discovery (read server-side from TokenPricing), never from this file."""
         if self._klm_price_gbp is None:
             # The facts below still hold if discovery is unreachable; only the figure is lost.
@@ -240,12 +240,12 @@ class KaelumStorefrontBackend(StorefrontBackend):
         price = f"£{self._klm_price_gbp:.2f}" if self._klm_price_gbp else "a fixed price"
         return {
             "klm_terms": (
-                f"KLM is the KAELUM commerce currency, for spending with KAELUM merchants "
-                f"and creators. One KLM costs {price}, a fixed price that does not go up "
-                "or down. KLM is not an investment, earns no return and is not worth "
+                f"KAE is the KAELUM commerce currency, for spending with KAELUM merchants "
+                f"and creators. One KAE costs {price}, a fixed price that does not go up "
+                "or down. KAE is not an investment, earns no return and is not worth "
                 "holding or buying in bulk for gain; never suggest otherwise. Customers "
-                "buy KLM at full price; the saving is the merchant's discount on goods "
-                "when they spend KLM. Every merchant gives at least 6% and many give "
+                "buy KAE at full price; the saving is the merchant's discount on goods "
+                "when they spend KAE. Every merchant gives at least 6% and many give "
                 "more: always quote the product's own discount_pct from its attributes, "
                 "never the 6% minimum, and never promise a bigger discount or a code "
                 "that is not in the product data. A 4.5% platform fee is added at "
@@ -259,15 +259,15 @@ class KaelumStorefrontBackend(StorefrontBackend):
         # the agent's per-turn read cheap.
         return UserPreferences(user_id=session.user_id, default_location="United Kingdom")
 
-    # -- Disclosure: the KLM terms for one product -----------------------------------
+    # -- Disclosure: the KAE terms for one product -----------------------------------
 
     async def get_disclosure(
         self, session: ShoppingSessionContext, product_id: str
     ) -> Disclosure | None:
-        """A facts box with the shopper's KLM terms for one product, built only from the
+        """A facts box with the shopper's KAE terms for one product, built only from the
         figures discovery returned for it. Nothing is computed from a hardcoded price or
         fee rate: the fee percentage is derived from the platform's own fee and net
-        figures, and the KLM unit price comes from discovery."""
+        figures, and the KAE unit price comes from discovery."""
         record = self._catalog.get(product_id)
         if record is None:
             return None
@@ -283,9 +283,9 @@ class KaelumStorefrontBackend(StorefrontBackend):
         if disc is not None:
             rows.append(
                 DisclosureRow(
-                    label="KLM discount",
+                    label="KAE discount",
                     value=f"{disc:g}%",
-                    note="A merchant discount on these goods when you pay in KLM.",
+                    note="A merchant discount on these goods when you pay in KAE.",
                 )
             )
         if net is not None:
@@ -305,24 +305,24 @@ class KaelumStorefrontBackend(StorefrontBackend):
         if total is not None:
             rows.append(DisclosureRow(label="Total to pay", value=f"£{total:.2f}"))
         if klm is not None:
-            rows.append(DisclosureRow(label="KLM to spend", value=f"{klm:g} KLM"))
+            rows.append(DisclosureRow(label="KAE to spend", value=f"{klm:g} KAE"))
         if self._klm_price_gbp:
             rows.append(
                 DisclosureRow(
-                    label="KLM price", value=f"£{self._klm_price_gbp:.2f} per KLM", note="Fixed."
+                    label="KAE price", value=f"£{self._klm_price_gbp:.2f} per KAE", note="Fixed."
                 )
             )
         if not rows:
             return None
         return Disclosure(
-            title="Paying with KLM",
+            title="Paying with KAE",
             product_id=product_id,
             rows=rows,
             sources=[str(record["canonical_url"])] if record.get("canonical_url") else [],
             footnotes=[
-                "The discount applies to the goods, never to the price of KLM.",
+                "The discount applies to the goods, never to the price of KAE.",
                 (
-                    "KLM is the KAELUM commerce currency for spending with KAELUM merchants. "
+                    "KAE is the KAELUM commerce currency for spending with KAELUM merchants. "
                     "It is not an investment and its price does not change."
                 ),
                 (
@@ -381,7 +381,7 @@ class KaelumStorefrontBackend(StorefrontBackend):
 
         disc_pct = record.get("discount_pct")
 
-        attributes: dict[str, str] = {"pay_in": "KLM"}
+        attributes: dict[str, str] = {"pay_in": "KAE"}
         for key in ("rrp_gbp", "net_gbp", "fee_gbp", "total_gbp", "klm_units", "discount_pct"):
             val = record.get(key)
             if val is not None:
@@ -390,9 +390,9 @@ class KaelumStorefrontBackend(StorefrontBackend):
         if pay_target:
             attributes["kaelum_pay_target"] = str(pay_target)
 
-        labels: list[str] = ["Pay with KLM"]
+        labels: list[str] = ["Pay with KAE"]
         if isinstance(disc_pct, (int, float)) and disc_pct > 0:
-            labels.append(f"{round(float(disc_pct), 1)}% off with KLM")
+            labels.append(f"{round(float(disc_pct), 1)}% off with KAE")
 
         return Product(
             product_id=pid,

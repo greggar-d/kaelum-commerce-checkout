@@ -10,4 +10,4 @@ shopping-agent-runtime) are installed unchanged from that repository at the
 commit pinned in requirements.txt. This repository adds a KAELUM storefront
 backend on top of them. It does not modify the blueprint.
 
-KAELUM, KLM and K.A.T.E. are marks of Kaelum Technologies Ltd.
+KAELUM, KAE and K.A.T.E. are marks of Kaelum Technologies Ltd.

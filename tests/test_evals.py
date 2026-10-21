@@ -112,13 +112,13 @@ def test_judge_records_verdict_and_fingerprint():
             async def create(**kwargs):
                 assert "tool_choice" not in kwargs
                 block = FakeBlock(type="tool_use", id="v", name="record_verdict",
-                                  input={"verdict": "PASS", "reason": "Quoted 149.95 KLM."})
+                                  input={"verdict": "PASS", "reason": "Quoted 149.95 KAE."})
                 return SimpleNamespace(content=[block])
 
     from kaelum_storefront.evals import TurnOutcome
 
     rec = _run(judge(FakeJudge(), "claude-sonnet-5-5", "PASS if x. FAIL if y.",
-                     {"turns": ["hi"]}, TurnOutcome(reply="149.95 KLM")))
+                     {"turns": ["hi"]}, TurnOutcome(reply="149.95 KAE")))
     assert rec["passed"] is True and len(rec["fingerprint"]) == 12
 
     class BrokenJudge:
@@ -137,7 +137,7 @@ def test_judge_records_verdict_and_fingerprint():
             @staticmethod
             async def create(**kwargs):
                 TextJudge.calls += 1
-                text = "" if TextJudge.calls == 1 else "pass: it says KLM is fixed at £0.20."
+                text = "" if TextJudge.calls == 1 else "pass: it says KAE is fixed at £0.20."
                 return SimpleNamespace(content=[SimpleNamespace(type="text", text=text)])
 
     rec = _run(judge(TextJudge(), "m", "r", {"turns": ["hi"]}, TurnOutcome()))

@@ -9,7 +9,7 @@ merchant's KAELUM data, printed to the terminal and optionally saved as JSON.
     python scripts/merchant_digest.py "How did last_30_days compare?" --out digest.json
 
 Needs KAELUM_MERCHANT_TOKEN (the merchant it reports on) and ANTHROPIC_API_KEY. The agent
-reads KLM checkout sales, the merchant's listings and their KLM pricing; it can propose
+reads KAE checkout sales, the merchant's listings and their KAE pricing; it can propose
 listing and price changes but never applies them (the merchant does, in their own store).
 """
 
@@ -30,7 +30,7 @@ from kaelum_storefront import KaelumClient, settings_from_env
 from kaelum_storefront.merchant import KaelumMerchantBackend, build_kaelum_merchant_config
 
 DEFAULT_PROMPT = (
-    "Give me this week's briefing: how KLM sales went against last week, what needs "
+    "Give me this week's briefing: how KAE sales went against last week, what needs "
     "attention, and one change worth considering."
 )
 SKILLS_DIR = Path(

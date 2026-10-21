@@ -7,12 +7,12 @@ over KAELUM for one merchant (the one the merchant token pays).
 
 What a KAELUM merchant agent can read:
 
-  get_business_snapshot / query_metrics  -> kaelumMerchantInsights (KLM checkout sales,
+  get_business_snapshot / query_metrics  -> kaelumMerchantInsights (KAE checkout sales,
                                             orders, checkouts started, conversion, AOV,
                                             discount given; this period vs the prior one)
   search_listings / get_listing          -> kaelumDiscover, scoped to the merchant_ref
-  get_pricing_context                    -> the same record: price, KLM discount, net, fee,
-                                            KLM units
+  get_pricing_context                    -> the same record: price, KAE discount, net, fee,
+                                            KAE units
 
 What it cannot, and says so (``get_merchant_context`` limitations):
 
@@ -176,7 +176,7 @@ class KaelumMerchantBackend(MerchantBackend):
                 low_stock=out_of_stock,
                 pending_changes=len(self.ledger.pending()),
             ),
-            note="KLM checkout sales only; conversion is paid / started checkouts; no traffic data.",
+            note="KAE checkout sales only; conversion is paid / started checkouts; no traffic data.",
         )
 
     async def query_metrics(
@@ -237,7 +237,7 @@ class KaelumMerchantBackend(MerchantBackend):
 
     def _to_listing(self, rec: dict[str, Any]) -> Listing:
         # stock is 0 because KAELUM does not track counts; the attribute says so.
-        attributes = {"pay_in": "KLM", "stock_count": "not tracked by KAELUM"}
+        attributes = {"pay_in": "KAE", "stock_count": "not tracked by KAELUM"}
         for key in ("discount_pct", "net_gbp", "fee_gbp", "total_gbp", "klm_units"):
             if rec.get(key) is not None:
                 attributes[key] = str(rec[key])
@@ -401,7 +401,7 @@ class KaelumMerchantBackend(MerchantBackend):
         self, session: MerchantSessionContext, promotion: PromotionDraft
     ) -> StagedChange:
         raise ChangeNotApplicable(
-            "KAELUM promotions are the merchant's KLM discount (minimum 6%), set in KAELUM "
+            "KAELUM promotions are the merchant's KAE discount (minimum 6%), set in KAELUM "
             "Integrations. Store promotions are run in the merchant's own store."
         )
 
@@ -445,7 +445,7 @@ class KaelumMerchantBackend(MerchantBackend):
             "listings": count,
             "klm_discount_pct": next(iter(rates)) if len(rates) == 1 else sorted(rates),
             "limitations": [
-                {"source": "sales", "note": "KLM checkout sessions only; paylinks, QR and transfers are not counted."},
+                {"source": "sales", "note": "KAE checkout sessions only; paylinks, QR and transfers are not counted."},
                 {"source": "traffic", "note": "KAELUM has no storefront traffic data; conversion is paid / started checkouts."},
                 {"source": "stock", "note": "Stock counts live in the merchant's store; KAELUM sees in or out of stock only."},
                 {"source": "campaigns", "note": "Ad campaigns are run outside KAELUM and are not visible here."},

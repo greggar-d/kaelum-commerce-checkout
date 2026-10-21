@@ -73,7 +73,7 @@ def test_discovery_maps_to_gross_priced_products(session):
     # Gross price is used, not the discounted net (the session applies the discount).
     assert p.price == 30.0
     assert p.currency == "GBP"
-    # KLM figures travel in attributes for the agent to present.
+    # KAE figures travel in attributes for the agent to present.
     assert p.attributes["klm_units"] == "138.0"
     assert p.attributes["discount_pct"] == "8.0"
     assert p.product_id.startswith("klm-")
@@ -291,9 +291,9 @@ def test_disclosure_uses_live_figures(session):
     assert d is not None
     rows = {r.label: r.value for r in d.rows}
     assert rows["Price"] == "£30.00"
-    assert rows["KLM discount"] == "8%"
+    assert rows["KAE discount"] == "8%"
     assert rows["Total to pay"] == "£28.84"
-    assert rows["KLM price"] == "£0.20 per KLM"  # from discovery, not hardcoded
+    assert rows["KAE price"] == "£0.20 per KAE"  # from discovery, not hardcoded
     assert "4.5%" in rows["KAELUM platform fee"]
     assert _run(backend.get_disclosure(session, "klm-unknown0")) is None
 

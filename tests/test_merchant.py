@@ -160,7 +160,7 @@ def test_unmanaged_systems_refuse_plainly(session):
     backend = KaelumMerchantBackend(FakeClient())
     with pytest.raises(ChangeNotApplicable):
         _run(backend.stage_inventory_action(session, []))
-    with pytest.raises(ChangeNotApplicable, match="KLM discount"):
+    with pytest.raises(ChangeNotApplicable, match="KAE discount"):
         _run(backend.stage_promotion(session, PromotionDraft(
             name="x", listing_ids=["klm-1"], discount_pct=10, starts="2026-10-20", ends="2026-10-27")))
     with pytest.raises(ChangeNotApplicable):

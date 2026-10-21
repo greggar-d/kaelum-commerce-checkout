@@ -2,7 +2,9 @@
 
 A KAELUM storefront backend for Anthropic's [commerce-agents](https://github.com/anthropics/commerce-agents) shopping agent.
 
-The blueprint builds a Claude shopping agent and deliberately stops at the money: its checkout renders the cart for the host to complete, and it never charges a card. This repository fills that gap. It implements the blueprint's one integration surface, `StorefrontBackend`, over KAELUM, so a Claude shopping agent can browse the KAELUM acceptance network as its catalogue and hand checkout off to KAELUM, where the customer completes the spend in KLM, the KAELUM commerce currency.
+KAE is the KAELUM commerce currency (formerly named KLM, renamed October 2026).
+
+The blueprint builds a Claude shopping agent and deliberately stops at the money: its checkout renders the cart for the host to complete, and it never charges a card. This repository fills that gap. It implements the blueprint's one integration surface, `StorefrontBackend`, over KAELUM, so a Claude shopping agent can browse the KAELUM acceptance network as its catalogue and hand checkout off to KAELUM, where the customer completes the spend in KAE, the KAELUM commerce currency.
 
 It follows the same pattern as Shopify's [claude-for-commerce-examples](https://github.com/Shopify/claude-for-commerce-examples): the blueprint packages install unchanged from a pinned commit, and this repository adds a storefront on top. It does not modify the blueprint.
 
@@ -12,9 +14,9 @@ Three live KAELUM endpoints do the work. The first two already back the KAELUM W
 
 | Blueprint surface | KAELUM endpoint | What it does |
 | --- | --- | --- |
-| `search_products`, `get_product_details` | `kaelumDiscover` | Read-only network discovery. Returns live KAELUM merchants and in-stock products, each priced in KLM at the discount checkout applies. Moves no money, reads no account. |
-| `checkout_handoff` | `createUniversalPaymentSession` | Takes a merchant Bearer token and a gross GBP amount, returns a hosted gateway URL. The customer completes the KLM spend on kaelum.app, where a human confirms it. |
-| `get_disclosure` | `kaelumDiscover` (same record) | The "Paying with KLM" facts box: price, merchant discount, platform fee, total, KLM to spend and the fixed KLM price, all from the figures discovery returned. Nothing is hardcoded. |
+| `search_products`, `get_product_details` | `kaelumDiscover` | Read-only network discovery. Returns live KAELUM merchants and in-stock products, each priced in KAE at the discount checkout applies. Moves no money, reads no account. |
+| `checkout_handoff` | `createUniversalPaymentSession` | Takes a merchant Bearer token and a gross GBP amount, returns a hosted gateway URL. The customer completes the KAE spend on kaelum.app, where a human confirms it. |
+| `get_disclosure` | `kaelumDiscover` (same record) | The "Paying with KAE" facts box: price, merchant discount, platform fee, total, KAE to spend and the fixed KAE price, all from the figures discovery returned. Nothing is hardcoded. |
 | (identity) | `kaelumWhoAmI` | Takes the merchant Bearer token and returns that merchant's public `merchant_ref`. Called once and cached. |
 
 The blueprint calls `checkout_handoff` after the model's `checkout` tool call and pins the returned URL onto the checkout card. The model never sees or supplies the URL, which matches KAELUM's own posture: an agent may stage the order, but a human confirms the spend on kaelum.app.
@@ -27,7 +29,7 @@ This backend resolves its `merchant_ref` from the token, scopes discovery to it,
 
 ## Money maths, so it reconciles
 
-The catalogue shows the gross GBP price. KAELUM applies the merchant discount itself, floored at 6 percent, when the session is created, so this backend passes the gross amount to the session and never a pre-discounted figure. Passing a net figure would discount twice. The KLM units, net price and discount for each product travel in the product's attributes, so the agent can tell the shopper what they pay in KLM and what they save while the authoritative charge stays with the KAELUM session. The backend also passes the merchant's discount to the session explicitly, so the discount quoted in discovery equals the discount charged at checkout. A record that carries only a net price is grossed back up by its own discount, so it is never discounted twice. Discovery's klm_units is the all-in amount the shopper pays: the discounted price plus the 4.5% KAELUM platform fee, which the buyer pays on top. The merchant receives the full discounted amount.
+The catalogue shows the gross GBP price. KAELUM applies the merchant discount itself, floored at 6 percent, when the session is created, so this backend passes the gross amount to the session and never a pre-discounted figure. Passing a net figure would discount twice. The KAE units, net price and discount for each product travel in the product's attributes, so the agent can tell the shopper what they pay in KAE and what they save while the authoritative charge stays with the KAELUM session. The backend also passes the merchant's discount to the session explicitly, so the discount quoted in discovery equals the discount charged at checkout. A record that carries only a net price is grossed back up by its own discount, so it is never discounted twice. Discovery's klm_units is the all-in amount the shopper pays: the discounted price plus the 4.5% KAELUM platform fee, which the buyer pays on top. The merchant receives the full discounted amount.
 
 ## Install
 
@@ -78,7 +80,7 @@ pytest -q
 
 | Merchant surface | KAELUM source | Notes |
 | --- | --- | --- |
-| `get_business_snapshot`, `query_metrics` | `kaelumMerchantInsights` | KLM checkout sales, orders, checkouts started, conversion (paid / started), average order value, discount given; this period against the one before. Read-only, no customer data. |
+| `get_business_snapshot`, `query_metrics` | `kaelumMerchantInsights` | KAE checkout sales, orders, checkouts started, conversion (paid / started), average order value, discount given; this period against the one before. Read-only, no customer data. |
 | `search_listings`, `get_listing`, `get_pricing_context` | `kaelumDiscover` | The merchant's own listings, with the same `klm-XXXXXXXX` ids the shopping side uses. |
 | stock, campaigns | not held by KAELUM | Switched off in `build_kaelum_merchant_config`; stated in the merchant context's limitations. |
 | `stage_listing_update`, `stage_price_update` | proposals only | Staged with the blueprint's guardrails. `apply_change` never writes: the merchant makes the approved change in their own store. |
@@ -92,7 +94,7 @@ python scripts/merchant_digest.py "How did last_30_days compare with the month b
 
 ## Evals
 
-The blueprint ships the eval case format and rules (`plugins/commerce-builder/skills/commerce-evals`) but no runner. `kaelum_storefront/evals.py` is the runner and `evals/cases.json` holds 13 cases in that format: search and grounding, the KLM price quote, the KLM terms facts box, cart, checkout without auto-payment, KLM described as spending money and never as an investment, invented orders and discounts, and an injection attack hidden in a third-party listing, each paired with a should-serve counterpart.
+The blueprint ships the eval case format and rules (`plugins/commerce-builder/skills/commerce-evals`) but no runner. `kaelum_storefront/evals.py` is the runner and `evals/cases.json` holds 13 cases in that format: search and grounding, the KAE price quote, the KAE terms facts box, cart, checkout without auto-payment, KAE described as spending money and never as an investment, invented orders and discounts, and an injection attack hidden in a third-party listing, each paired with a should-serve counterpart.
 
 Each case drives one turn of the blueprint's `ShoppingAgent` over this backend. Code graders read the turn's events and the cart it leaves; a rubric goes to a judge model, pinned by name and asked to answer through a structured verdict tool, and each verdict carries a fingerprint of the judge model and rubric. Data comes from `evals/catalogue.json` (8T Clothing's live listings as recorded on 19 October 2026, plus two eval-only listings from an invented seller), or from live discovery with `--live`. No eval ever creates a payment session.
 
@@ -106,7 +108,7 @@ Reports go to `evals/reports/` as JSON and Markdown. The exit status is 0 only w
 
 ## Scope of this pilot
 
-This is the blueprint's sanctioned minimal shape: implement search and product details, and switch off what the store does not serve. Cart, checkout and the KLM terms facts box are on. The agent is told to show the facts box before the shopper pays. Orders, policies and fulfillment are off in `build_kaelum_shopping_config`, because KAELUM discovery does not serve those today; their tools are removed on every path.
+This is the blueprint's sanctioned minimal shape: implement search and product details, and switch off what the store does not serve. Cart, checkout and the KAE terms facts box are on. The agent is told to show the facts box before the shopper pays. Orders, policies and fulfillment are off in `build_kaelum_shopping_config`, because KAELUM discovery does not serve those today; their tools are removed on every path.
 
 ## Known seams to close before production
 

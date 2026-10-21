@@ -8,16 +8,16 @@ Both endpoints already exist on the live platform and back the KAELUM WebMCP lay
 
   kaelumDiscover                 read-only network discovery. Returns live KAELUM
                                  merchants and in-stock catalogue products, each
-                                 priced in KLM at the discount checkout applies.
+                                 priced in KAE at the discount checkout applies.
                                  Moves no money, reads no account.
 
   createUniversalPaymentSession  headless session creator. Takes a merchant Bearer
                                  token and a gross GBP amount, returns a hosted
-                                 gateway URL. The customer completes the KLM spend
+                                 gateway URL. The customer completes the KAE spend
                                  on kaelum.app, where a human confirms it.
 
 The client only consumes what the platform returns. It never computes or hardcodes a
-KLM price: the price and the discount come back from the endpoints, which read them
+KAE price: the price and the discount come back from the endpoints, which read them
 dynamically server-side.
 """
 
@@ -122,7 +122,7 @@ class KaelumClient:
     # -- Merchant insights (merchant agent) -----------------------------------------
 
     async def merchant_insights(self, from_day: str, to_day: str) -> dict[str, Any]:
-        """Call kaelumMerchantInsights with the merchant token: this merchant's KLM
+        """Call kaelumMerchantInsights with the merchant token: this merchant's KAE
         checkout totals for ``from_day``..``to_day`` (YYYY-MM-DD, inclusive), the equal
         prior range, and a daily series. Read-only; returns no customer data."""
         if not self._s.merchant_token:

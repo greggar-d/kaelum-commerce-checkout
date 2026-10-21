@@ -6,7 +6,7 @@
 
 ``settings_from_env`` reads the deployment knobs. ``build_kaelum_shopping_config``
 returns a ``ShoppingAgentConfig`` for a KAELUM-network pilot: cart, checkout and the
-KLM terms facts box (disclosures) on,
+KAE terms facts box (disclosures) on,
 orders and policies and fulfillment off (KAELUM discovery does not serve those yet),
 and the id pattern extended so the catalog grounding gate fires on ``klm-XXXXXXXX`` ids.
 """
@@ -74,15 +74,15 @@ def build_kaelum_shopping_config(
         # No shopper memory in this pilot: nothing about a guest is kept between sessions.
         enable_memory=False,
         assistant_name="the KAELUM shopping assistant",
-        brand_voice="confident, plain about the KLM discount, and honest about trade-offs",
-        # The KLM discount is a merchant-side discount on goods when a shopper spends
-        # KLM; it is never a discount on the KLM price itself. The agent should say so.
+        brand_voice="confident, plain about the KAE discount, and honest about trade-offs",
+        # The KAE discount is a merchant-side discount on goods when a shopper spends
+        # KAE; it is never a discount on the KAE price itself. The agent should say so.
         domain_search_notes=(
-            "Every result is a KAELUM merchant that accepts KLM, the KAELUM commerce "
+            "Every result is a KAELUM merchant that accepts KAE, the KAELUM commerce "
             "currency. The listed price is the gross price in pounds; the attributes "
-            "carry the KLM units and the merchant discount the shopper receives when "
-            "they pay in KLM. Present the KLM price and the saving, never a price change "
-            "on KLM itself. When a shopper is close to buying, show the KLM terms for "
+            "carry the KAE units and the merchant discount the shopper receives when "
+            "they pay in KAE. Present the KAE price and the saving, never a price change "
+            "on KAE itself. When a shopper is close to buying, show the KAE terms for "
             "the product with present_disclosure so they see the fee and the total "
             "before they pay."
         ),
